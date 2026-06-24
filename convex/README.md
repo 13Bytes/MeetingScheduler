@@ -23,8 +23,10 @@ tokens, availability records, notifications, and audit events.
 
 ## Token Strategy
 
-Membership links and magic links are bearer secrets. The raw token is returned
-only by the mutation that creates it. The database stores:
+Membership links and magic links are bearer secrets. Membership creation returns
+the raw personal link token once. Magic-link issue requests queue a notification
+placeholder and return only a fingerprint until a trusted out-of-band delivery
+path exists. The database stores:
 
 - `tokenHash`: a SHA-256 hash with an application context prefix.
 - `tokenFingerprint`: the first 16 characters of the hash digest for support

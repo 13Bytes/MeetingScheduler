@@ -42,7 +42,7 @@ export const allowedTimeRangeValidator = v.object({
 export const finalizedSlotValidator = v.object({
   startUtc: v.string(),
   endUtc: v.string(),
-  timeZone: v.string(),
+  timeZone: v.optional(v.string()),
 });
 
 export const tokenFieldsValidator = {

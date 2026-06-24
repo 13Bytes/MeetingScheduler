@@ -7,7 +7,7 @@ const TOKEN_PREFIXES: Record<SecretTokenKind, string> = {
   magicLink: "ms_magic",
 };
 
-const TOKEN_HASH_CONTEXT = "meeting-scheduler-stage-1";
+const TOKEN_HASH_CONTEXT = "meeting-scheduler:secret-token:v1";
 
 export type SecretTokenMaterial = {
   rawToken: string;

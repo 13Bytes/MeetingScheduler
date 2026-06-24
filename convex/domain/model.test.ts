@@ -187,6 +187,25 @@ describe("schema-adjacent helpers", () => {
         30,
       ),
     ).toThrow(/boundaries must align/u);
+
+    expect(() =>
+      makeAvailabilityCellKey("2026-06-24T07:00:00", "2026-06-24T07:30:00Z"),
+    ).toThrow(/explicit timezone offset/u);
+  });
+
+  it("aligns availability cells to the meeting wall-clock timezone", () => {
+    expect(() =>
+      assertAvailabilityCellAlignment(
+        "2026-06-23T18:15:00Z",
+        "2026-06-23T18:45:00Z",
+        30,
+        "Asia/Kathmandu",
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      assertAvailabilityCellAlignment("2026-06-23T18:15:00Z", "2026-06-23T18:45:00Z", 30),
+    ).toThrow(/boundaries must align/u);
   });
 
   it("normalizes and validates finalized slots", () => {

@@ -201,19 +201,30 @@ export function assertAvailabilityCellAlignment(
   startUtc: string,
   endUtc: string,
   granularityMinutes: number,
+  timeZone = DEFAULT_TIME_ZONE,
 ): void {
-  const startMs = Date.parse(normalizeIsoInstant("startUtc", startUtc));
-  const endMs = Date.parse(normalizeIsoInstant("endUtc", endUtc));
+  assertIanaTimeZone(timeZone);
+
+  const normalizedStartUtc = normalizeIsoInstant("startUtc", startUtc);
+  const normalizedEndUtc = normalizeIsoInstant("endUtc", endUtc);
+  const startMs = Date.parse(normalizedStartUtc);
+  const endMs = Date.parse(normalizedEndUtc);
   const granularityMs = granularityMinutes * 60 * 1000;
 
   if (endMs <= startMs) {
     throw new Error("Availability cell endUtc must be after startUtc");
   }
-  if (startMs % granularityMs !== 0 || endMs % granularityMs !== 0) {
-    throw new Error("Availability cell boundaries must align to the meeting grid");
-  }
   if ((endMs - startMs) % granularityMs !== 0) {
     throw new Error("Availability cell must align to the meeting granularity");
+  }
+
+  const startParts = getZonedTimeParts(normalizedStartUtc, timeZone);
+  const endParts = getZonedTimeParts(normalizedEndUtc, timeZone);
+  if (
+    !isOnLocalGridBoundary(startParts, granularityMinutes) ||
+    !isOnLocalGridBoundary(endParts, granularityMinutes)
+  ) {
+    throw new Error("Availability cell boundaries must align to the meeting grid");
   }
 }
 
@@ -227,7 +238,12 @@ export function normalizeFinalizedSlot(
   },
 ): Slot {
   const slot = normalizeAllowedTimeRange(input, meeting.canonicalTimeZone);
-  assertAvailabilityCellAlignment(slot.startUtc, slot.endUtc, meeting.granularityMinutes);
+  assertAvailabilityCellAlignment(
+    slot.startUtc,
+    slot.endUtc,
+    meeting.granularityMinutes,
+    slot.timeZone,
+  );
 
   const durationMs = Date.parse(slot.endUtc) - Date.parse(slot.startUtc);
   if (durationMs !== meeting.durationMinutes * 60 * 1000) {
@@ -297,9 +313,45 @@ function assertIanaTimeZone(timeZone: string): void {
 }
 
 export function normalizeIsoInstant(name: string, value: string): string {
+  if (!/(?:z|[+-]\d{2}:\d{2})$/iu.test(value.trim())) {
+    throw new Error(`${name} must include an explicit timezone offset`);
+  }
+
   const time = Date.parse(value);
   if (!Number.isFinite(time)) {
     throw new Error(`${name} must be a valid ISO instant`);
   }
   return new Date(time).toISOString();
+}
+
+function getZonedTimeParts(
+  isoInstant: string,
+  timeZone: string,
+): {
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(isoInstant));
+
+  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
+  return {
+    hour: Number(valueByType.get("hour")),
+    minute: Number(valueByType.get("minute")),
+    second: Number(valueByType.get("second")),
+  };
+}
+
+function isOnLocalGridBoundary(
+  parts: { hour: number; minute: number; second: number },
+  granularityMinutes: number,
+): boolean {
+  const minuteOfDay = parts.hour * 60 + parts.minute;
+  return parts.second === 0 && minuteOfDay % granularityMinutes === 0;
 }

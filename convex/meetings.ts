@@ -25,6 +25,8 @@ import {
   privacyModeValidator,
 } from "./domain/validators";
 
+const MAX_MAGIC_LINK_TTL_MS = 30 * 60 * 1000;
+
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
   granularityMinutes: v.optional(v.number()),
@@ -209,6 +211,9 @@ export const createMembership = mutation({
       const actor = args.createdByMembershipToken
         ? await findMembershipByToken(ctx, args.createdByMembershipToken)
         : null;
+      if (actor?.meetingId !== meeting._id) {
+        throw new Error("Admin creator must belong to this meeting");
+      }
       assertCanAdminister(meeting, actor);
       actorMembershipId = actor?._id;
     }
@@ -263,7 +268,13 @@ export const updateMeetingSettings = mutation({
     assertCanEditOpenMeeting(meeting, membership);
 
     const normalizedSettings = args.settings
-      ? normalizeMeetingSettings(args.settings)
+      ? normalizeMeetingSettings({
+          canonicalTimeZone: args.settings.canonicalTimeZone ?? meeting.canonicalTimeZone,
+          granularityMinutes:
+            args.settings.granularityMinutes ?? meeting.granularityMinutes,
+          durationMinutes: args.settings.durationMinutes ?? meeting.durationMinutes,
+          allowedTimeRanges: args.settings.allowedTimeRanges ?? meeting.allowedTimeRanges,
+        })
       : undefined;
 
     await ctx.db.patch(meeting._id, {
@@ -387,6 +398,9 @@ export const createMagicLink = mutation({
     if (args.expiresAt <= now) {
       throw new Error("Magic link expiry must be in the future");
     }
+    if (args.expiresAt - now > MAX_MAGIC_LINK_TTL_MS) {
+      throw new Error("Magic link expiry exceeds the maximum lifetime");
+    }
 
     const emailIdentityId = await upsertEmailIdentity(
       ctx,
@@ -413,9 +427,26 @@ export const createMagicLink = mutation({
       createdAt: now,
     });
 
+    await ctx.db.insert("notificationOutbox", {
+      meetingId: recoveryTarget.meetingId,
+      membershipId: recoveryTarget.membershipId,
+      emailIdentityId,
+      kind: `magicLink.${args.purpose}`,
+      status: "pending",
+      dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
+      payload: {
+        magicLinkId,
+        tokenFingerprint: magicLinkToken.tokenFingerprint,
+      },
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return {
       magicLinkId,
-      magicLinkToken: magicLinkToken.rawToken,
+      tokenFingerprint: magicLinkToken.tokenFingerprint,
+      deliveryQueued: true,
     };
   },
 });
@@ -441,6 +472,7 @@ export const upsertAvailabilityRecord = mutation({
       args.startUtc,
       args.endUtc,
       meeting.granularityMinutes,
+      args.timeZone ?? meeting.canonicalTimeZone,
     );
     if (
       !isSlotInsideAllowedRanges(
@@ -452,6 +484,7 @@ export const upsertAvailabilityRecord = mutation({
     }
 
     const cellKey = makeAvailabilityCellKey(args.startUtc, args.endUtc);
+    const [normalizedStartUtc, normalizedEndUtc] = cellKey.split("_") as [string, string];
     const existingRecord = await ctx.db
       .query("availabilityRecords")
       .withIndex("by_membership_cell", (q) =>
@@ -462,8 +495,8 @@ export const upsertAvailabilityRecord = mutation({
     const recordFields = {
       meetingId: meeting._id,
       membershipId: membership._id,
-      startUtc: new Date(Date.parse(args.startUtc)).toISOString(),
-      endUtc: new Date(Date.parse(args.endUtc)).toISOString(),
+      startUtc: normalizedStartUtc,
+      endUtc: normalizedEndUtc,
       timeZone: args.timeZone ?? meeting.canonicalTimeZone,
       cellKey,
       response: args.response,
@@ -659,6 +692,29 @@ async function replaceAllowedTimeRanges(
   }
 
   await insertAllowedTimeRanges(ctx, args);
+  await pruneAvailabilityOutsideRanges(ctx, args.meetingId, args.ranges);
+}
+
+async function pruneAvailabilityOutsideRanges(
+  ctx: MutationLikeCtx,
+  meetingId: Id<"meetings">,
+  allowedTimeRanges: {
+    startUtc: string;
+    endUtc: string;
+    timeZone: string;
+    label?: string;
+  }[],
+) {
+  const records = await ctx.db
+    .query("availabilityRecords")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
+    .collect();
+
+  for (const record of records) {
+    if (!isSlotInsideAllowedRanges(record, allowedTimeRanges)) {
+      await ctx.db.delete(record._id);
+    }
+  }
 }
 
 async function insertAllowedTimeRanges(

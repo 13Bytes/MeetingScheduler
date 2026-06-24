@@ -40,9 +40,10 @@ Key invariants:
 - Every participant, including each admin, is represented by a membership.
 - Admin is a membership role. Multiple admins are allowed.
 - Meetings can enable `everyoneAdmin`, where any active member can administer.
-- Secret membership and magic-link tokens are returned only at creation/issue
-  time. Convex stores SHA-256 hashes plus hash-derived fingerprints, never raw
-  tokens.
+- Secret membership tokens are returned only at creation time. Magic-link issue
+  requests queue a notification placeholder and return only a fingerprint until
+  trusted out-of-band delivery exists. Convex stores SHA-256 hashes plus
+  hash-derived fingerprints, never raw tokens.
 - Meeting lifecycle is `open -> finalized -> open` through explicit admin
   transitions. Finalized meetings are read-only until reopened.
 - Meeting rules use a canonical IANA timezone and UTC-normalized range/cell
