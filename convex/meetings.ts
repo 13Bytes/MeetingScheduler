@@ -12,6 +12,7 @@ import {
   normalizeEmailAddress,
   normalizeFinalizedSlot,
   normalizeMeetingSettings,
+  normalizeMeetingTitle,
   slugifyMeetingTitle,
   transitionMeetingLifecycle,
 } from "./domain/model";
@@ -50,14 +51,16 @@ export const createMeeting = mutation({
     description: v.optional(v.string()),
     creatorName: v.optional(v.string()),
     creatorEmail: v.optional(v.string()),
+    creatorPrivacyMode: v.optional(privacyModeValidator),
     adminMode: v.optional(adminModeValidator),
     settings: v.optional(v.object(meetingSettingsArgs)),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const title = normalizeMeetingTitle(args.title);
     const settings = normalizeMeetingSettings(args.settings);
     const adminToken = await createSecretToken("membership");
-    const slugBase = slugifyMeetingTitle(args.slug ?? args.title);
+    const slugBase = slugifyMeetingTitle(args.slug ?? title);
     const slug =
       args.slug === undefined
         ? `${slugBase}-${adminToken.tokenFingerprint.slice(0, 6)}`
@@ -76,7 +79,7 @@ export const createMeeting = mutation({
       : undefined;
 
     const meetingId = await ctx.db.insert("meetings", {
-      title: args.title.trim(),
+      title,
       slug,
       description: args.description?.trim(),
       lifecycleState: "open",
@@ -95,7 +98,7 @@ export const createMeeting = mutation({
       emailIdentityId,
       displayName: args.creatorName?.trim(),
       role: "admin",
-      privacyMode: "detailed",
+      privacyMode: args.creatorPrivacyMode ?? "detailed",
       tokenHash: adminToken.tokenHash,
       tokenFingerprint: adminToken.tokenFingerprint,
       tokenVersion: 1,

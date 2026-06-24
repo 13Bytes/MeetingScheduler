@@ -1,9 +1,9 @@
 # Meeting Scheduler
 
-A Stage 1 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 2 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
-backend layer, a typed domain model, and Tailwind-based UI primitives for
-calendar-heavy flows.
+backend layer, a typed domain model, Tailwind-based UI primitives, and an
+anonymous meeting creation flow.
 
 ## Stack
 
@@ -15,8 +15,9 @@ calendar-heavy flows.
 
 ## Domain Model
 
-Stage 1 defines the backend/domain foundation without shipping the full meeting
-creation or availability painting UI.
+Stage 1 defines the backend/domain foundation. Stage 2 adds the first
+user-facing creation flow while keeping the full availability painting and
+recommendation workflows for later stages.
 
 Core Convex tables:
 
@@ -53,13 +54,39 @@ Key invariants:
 
 ## Routes
 
-| Route                                 | Purpose                                    |
-| ------------------------------------- | ------------------------------------------ |
-| `/`                                   | Foundation overview and route entry points |
-| `/new`                                | Future meeting creation flow               |
-| `/m/[meetingSlug]`                    | Future public meeting poll                 |
-| `/m/[meetingSlug]/admin/[adminToken]` | Future organizer route by secret link      |
-| `/join/[membershipToken]`             | Future secret membership link route        |
+| Route                     | Purpose                                    |
+| ------------------------- | ------------------------------------------ |
+| `/`                       | Foundation overview and route entry points |
+| `/new`                    | Anonymous meeting creation flow            |
+| `/m/[meetingSlug]`        | Future public meeting poll                 |
+| `/join/[membershipToken]` | Secret membership link route               |
+
+## Meeting Creation Flow
+
+`/new` lets an anonymous creator configure and create a meeting through the
+Stage 1 Convex `createMeeting` mutation. The flow collects:
+
+- title and optional description
+- canonical IANA timezone
+- meeting duration and slot granularity
+- creator availability privacy mode
+- role-based or everyone-admin administration mode
+- broad allowed-time ranges through presets
+
+The currently supported allowed-time shortcuts are:
+
+- weekdays 09:00-17:00 for the next two weeks
+- the next 10 days from 10:00-16:00
+- a modest custom daily range with date, time, and weekend controls
+
+After Convex creates the meeting and creator membership, the page displays two
+copyable links:
+
+- the creator's personal admin membership link at `/join/[membershipToken]`
+- the public participant link at `/m/[meetingSlug]`
+
+Admin access uses the same membership-secret-link model as every other
+person-meeting relationship. There is no separate admin token model.
 
 ## Environment
 
@@ -105,6 +132,10 @@ Run Convex locally:
 npm run convex:dev
 ```
 
+Convex codegen and live validation require a configured `CONVEX_DEPLOYMENT`.
+Without that environment value, `npx convex codegen` exits before checking the
+local functions.
+
 Lint:
 
 ```bash
@@ -131,8 +162,8 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 1 intentionally does not implement the full meeting creation UI, admin
-calendar painting, participant painting, recommendations, email delivery,
-finalization screens, or AI-agent APIs. Those features should build on the
-schema, domain helpers, core Convex functions, route map, and component
-foundation introduced here.
+Stage 2 intentionally does not implement the full admin calendar constraint
+painter, participant availability painter, recommendation engine, passwordless
+email identity, notification delivery, cookie-backed anonymous recovery,
+finalization workflow, or AI-agent APIs. The creation flow is link-based for now:
+the creator must keep their personal admin membership URL.

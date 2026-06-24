@@ -7,6 +7,7 @@ import {
   normalizeFinalizedSlot,
   normalizeEmailAddress,
   normalizeMeetingSettings,
+  normalizeMeetingTitle,
   slugifyMeetingTitle,
   transitionMeetingLifecycle,
 } from "./model";
@@ -62,6 +63,30 @@ describe("meeting settings", () => {
         ],
       }),
     ).toThrow(/endUtc must be after startUtc/u);
+    expect(() =>
+      normalizeMeetingSettings({
+        granularityMinutes: 30,
+        durationMinutes: 90,
+        allowedTimeRanges: [
+          {
+            startUtc: "2026-06-24T09:00:00Z",
+            endUtc: "2026-06-24T10:00:00Z",
+          },
+        ],
+      }),
+    ).toThrow(/at least as long/u);
+    expect(() =>
+      normalizeMeetingSettings({
+        granularityMinutes: 30,
+        durationMinutes: 60,
+        allowedTimeRanges: [
+          {
+            startUtc: "2026-06-24T09:07:00Z",
+            endUtc: "2026-06-24T10:07:00Z",
+          },
+        ],
+      }),
+    ).toThrow(/boundaries must align/u);
   });
 });
 
@@ -248,6 +273,8 @@ describe("schema-adjacent helpers", () => {
   });
 
   it("normalizes slugs and email identities", () => {
+    expect(normalizeMeetingTitle("  Team Planning  ")).toBe("Team Planning");
+    expect(() => normalizeMeetingTitle("   ")).toThrow(/title is required/u);
     expect(slugifyMeetingTitle("  Team Planning / Q3!  ")).toBe("team-planning-q3");
     expect(normalizeEmailAddress("  Ada@Example.COM ")).toBe("ada@example.com");
     expect(() => normalizeEmailAddress("not-email")).toThrow(
