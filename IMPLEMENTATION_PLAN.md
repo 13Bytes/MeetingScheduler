@@ -19,11 +19,14 @@ collaboration, and later AI-agent-friendly APIs.
    - Configure Convex local development basics.
    - Add Tailwind and a compact UI foundation.
    - Add linting, formatting, tests, route placeholders, and environment docs.
-2. **Stage 1: Meeting Creation**
-   - Add meeting creation forms, Convex tables, validation, and secret links.
-3. **Stage 2: Availability Collaboration**
+2. **Stage 1: Domain Model and Core Functions**
+   - Add Convex tables, domain validation, permission helpers, lifecycle
+     transitions, token handling, and foundational mutations/queries.
+3. **Stage 2: Meeting Creation**
+   - Add meeting creation forms and connect the UI to the Stage 1 functions.
+4. **Stage 3: Availability Collaboration**
    - Add realtime availability painting and participant state.
-4. **Stage 3: Finalization and Notifications**
+5. **Stage 4: Finalization and Notifications**
    - Add organizer finalization and email notifications.
-5. **Stage 4: Agent-Friendly APIs**
+6. **Stage 5: Agent-Friendly APIs**
    - Expose safe API surfaces for external assistants and automations.
