@@ -13,8 +13,11 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as meetings from "../meetings.js";
 
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  meetings: typeof meetings;
+}>;
 
 /**
  * A utility for referencing Convex functions in your app's public API.

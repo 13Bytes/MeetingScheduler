@@ -8,13 +8,15 @@ const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   const convexClient = useMemo(() => {
     if (!convexUrl) {
-      throw new Error(
-        "Missing NEXT_PUBLIC_CONVEX_URL. Run `npm run convex:dev` to generate local env values.",
-      );
+      return null;
     }
 
     return new ConvexReactClient(convexUrl);
   }, []);
+
+  if (!convexClient) {
+    return <>{children}</>;
+  }
 
   return <ConvexProvider client={convexClient}>{children}</ConvexProvider>;
 }
