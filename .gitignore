@@ -1,1 +1,10 @@
+.env
+.env*.local
+.convex/
+.next/
+node_modules/
+coverage/
+dist/
+out/
+*.tsbuildinfo
 .vscode/settings.json
