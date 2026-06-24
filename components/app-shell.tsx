@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { routes } from "@/lib/routes";
 
 const navItems = [
-  { href: "/", label: "Overview" },
-  { href: "/new", label: "New meeting" },
-  { href: "/m/demo-poll", label: "Poll" },
+  { href: routes.home, label: "Overview" },
+  { href: routes.newMeeting, label: "New meeting" },
+  { href: routes.meetingPoll("demo-poll"), label: "Poll" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

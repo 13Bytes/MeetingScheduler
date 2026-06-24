@@ -30,6 +30,7 @@ export function Button({
   variant,
   size,
   asChild = false,
+  type,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -38,6 +39,10 @@ export function Button({
   const Component = asChild ? Slot : "button";
 
   return (
-    <Component className={cn(buttonVariants({ variant, size }), className)} {...props} />
+    <Component
+      className={cn(buttonVariants({ variant, size }), className)}
+      {...(!asChild ? { type: type ?? "button" } : type ? { type } : {})}
+      {...props}
+    />
   );
 }

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CalendarGridPreview } from "@/components/ui/calendar-grid-preview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { routes } from "@/lib/routes";
 
 const foundationItems = [
   {
@@ -42,10 +43,10 @@ export default function HomePage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild>
-              <Link href="/new">Start placeholder</Link>
+              <Link href={routes.newMeeting}>Start placeholder</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link href="/m/demo-poll">View poll placeholder</Link>
+              <Link href={routes.meetingPoll("demo-poll")}>View poll placeholder</Link>
             </Button>
           </div>
         </div>
