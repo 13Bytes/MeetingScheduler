@@ -550,7 +550,7 @@ function buildSelectedRanges({
 }
 
 function getDefaultTimeZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  return normalizeTimeZoneId(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 }
 
 function getDefaultCustomFromDate() {
@@ -630,8 +630,23 @@ function buildTimeZoneOptions(currentTimeZone: string) {
     "Asia/Tokyo",
     "Australia/Sydney",
   ];
-  return Array.from(new Set([currentTimeZone, "UTC", ...values])).sort();
+  return Array.from(
+    new Set([currentTimeZone, "UTC", ...values].map(normalizeTimeZoneId)),
+  ).sort();
 }
+
+function normalizeTimeZoneId(timeZone: string) {
+  return timeZoneAliases[timeZone] ?? timeZone;
+}
+
+const timeZoneAliases: Record<string, string> = {
+  "Africa/Asmera": "Africa/Asmara",
+  "America/Godthab": "America/Nuuk",
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Asia/Katmandu": "Asia/Kathmandu",
+  "Europe/Kiev": "Europe/Kyiv",
+  "Pacific/Truk": "Pacific/Chuuk",
+};
 
 const presetOptions: {
   id: AllowedTimePresetId;

@@ -8,14 +8,21 @@
  * @module
  */
 
+import type * as domain_model from "../domain/model.js";
+import type * as domain_tokens from "../domain/tokens.js";
+import type * as domain_validators from "../domain/validators.js";
+import type * as meetings from "../meetings.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
-import type * as meetings from "../meetings.js";
 
 declare const fullApi: ApiFromModules<{
+  "domain/model": typeof domain_model;
+  "domain/tokens": typeof domain_tokens;
+  "domain/validators": typeof domain_validators;
   meetings: typeof meetings;
 }>;
 

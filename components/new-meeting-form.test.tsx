@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewMeetingForm } from "@/components/new-meeting-form";
 
 describe("NewMeetingForm", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("creates a meeting and shows personal admin plus public links", async () => {
     const createMeeting = vi.fn().mockResolvedValue({
       slug: "team-planning",
@@ -84,5 +88,19 @@ describe("NewMeetingForm", () => {
 
     expect(screen.getByRole("button", { name: /create meeting/i })).toBeDisabled();
     expect(screen.getByText(/NEXT_PUBLIC_CONVEX_URL/u)).toBeInTheDocument();
+  });
+
+  it("normalizes time zone aliases for stable hydration", () => {
+    vi.spyOn(Intl, "supportedValuesOf").mockReturnValue([
+      "Africa/Asmera",
+      "Europe/Berlin",
+    ]);
+
+    render(<NewMeetingForm />);
+
+    expect(screen.getByRole("option", { name: "Africa/Asmara" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Africa/Asmera" }),
+    ).not.toBeInTheDocument();
   });
 });
