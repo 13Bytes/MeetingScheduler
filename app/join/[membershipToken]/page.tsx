@@ -1,5 +1,6 @@
 import { KeyRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { ConnectedAdminCalendarPainter } from "@/components/admin-calendar-painter";
 import { RoutePlaceholder } from "@/components/route-placeholder";
 
 export default async function JoinByMembershipLinkPage({
@@ -7,16 +8,21 @@ export default async function JoinByMembershipLinkPage({
 }: {
   params: Promise<{ membershipToken: string }>;
 }) {
-  await params;
+  const { membershipToken } = await params;
+  const isConvexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
     <AppShell>
-      <RoutePlaceholder
-        icon={KeyRound}
-        eyebrow="Secret membership link"
-        title="Join meeting"
-        description="Membership token detected. Later stages will resolve this bearer token through Convex before showing availability tools."
-      />
+      {isConvexConfigured ? (
+        <ConnectedAdminCalendarPainter membershipToken={membershipToken} />
+      ) : (
+        <RoutePlaceholder
+          icon={KeyRound}
+          eyebrow="Secret membership link"
+          title="Admin calendar setup"
+          description="Set NEXT_PUBLIC_CONVEX_URL to resolve the membership link and edit allowed meeting regions."
+        />
+      )}
     </AppShell>
   );
 }

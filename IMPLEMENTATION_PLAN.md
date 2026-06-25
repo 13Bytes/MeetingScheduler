@@ -30,9 +30,17 @@ collaboration, and later AI-agent-friendly APIs.
    - Show the creator's personal admin membership link and public participant
      link after creation.
    - Keep cookie-backed anonymous recovery for a later stage.
-4. **Stage 3: Availability Collaboration**
-   - Add realtime availability painting and participant state.
-5. **Stage 4: Finalization and Notifications**
+4. **Stage 3: Admin Calendar Constraint Painter**
+   - Replace the membership-link placeholder with the admin setup/editing view.
+   - Let admins paint broad allowed and blocked calendar regions using the
+     meeting timezone, duration, and granularity.
+   - Persist allowed ranges through the existing Convex settings/domain layer.
+   - Keep participant availability painting, recommendations, and finalization
+     UI for later stages.
+5. **Stage 4: Availability Collaboration**
+   - Add realtime availability painting and participant state inside the
+     admin-allowed cells.
+6. **Stage 5: Finalization and Notifications**
    - Add organizer finalization and email notifications.
-6. **Stage 5: Agent-Friendly APIs**
+7. **Stage 6: Agent-Friendly APIs**
    - Expose safe API surfaces for external assistants and automations.

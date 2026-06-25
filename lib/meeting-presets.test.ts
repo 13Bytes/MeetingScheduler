@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildAllowedTimeRanges, buildCustomDailyRanges } from "@/lib/meeting-presets";
+import {
+  MAX_CUSTOM_RANGE_DAYS,
+  buildAllowedTimeRanges,
+  buildCustomDailyRanges,
+} from "@/lib/meeting-presets";
 
 describe("allowed time presets", () => {
   it("builds weekday business ranges in the meeting timezone", () => {
@@ -93,5 +97,33 @@ describe("allowed time presets", () => {
         "America/New_York",
       ),
     ).toThrow(/does not exist/u);
+  });
+
+  it("bounds custom ranges to keep later calendar grids manageable", () => {
+    expect(
+      buildCustomDailyRanges(
+        {
+          fromDate: "2026-06-01",
+          toDate: "2026-07-12",
+          startTime: "09:00",
+          endTime: "17:00",
+          includeWeekends: true,
+        },
+        "UTC",
+      ),
+    ).toHaveLength(MAX_CUSTOM_RANGE_DAYS);
+
+    expect(() =>
+      buildCustomDailyRanges(
+        {
+          fromDate: "2026-06-01",
+          toDate: "2026-07-20",
+          startTime: "09:00",
+          endTime: "17:00",
+          includeWeekends: true,
+        },
+        "UTC",
+      ),
+    ).toThrow(new RegExp(`cannot exceed ${MAX_CUSTOM_RANGE_DAYS} days`, "u"));
   });
 });
