@@ -1,9 +1,9 @@
 # Meeting Scheduler
 
-A Stage 2 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 3 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
-backend layer, a typed domain model, Tailwind-based UI primitives, and an
-anonymous meeting creation flow.
+backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
+meeting creation flow, and an admin calendar constraint painter.
 
 ## Stack
 
@@ -16,8 +16,9 @@ anonymous meeting creation flow.
 ## Domain Model
 
 Stage 1 defines the backend/domain foundation. Stage 2 adds the first
-user-facing creation flow while keeping the full availability painting and
-recommendation workflows for later stages.
+user-facing creation flow. Stage 3 adds the admin setup/editing experience for
+painting broad allowed candidate time regions while keeping participant
+availability and recommendation workflows for later stages.
 
 Core Convex tables:
 
@@ -59,7 +60,7 @@ Key invariants:
 | `/`                       | Foundation overview and route entry points |
 | `/new`                    | Anonymous meeting creation flow            |
 | `/m/[meetingSlug]`        | Future public meeting poll                 |
-| `/join/[membershipToken]` | Secret membership link route               |
+| `/join/[membershipToken]` | Secret membership link and admin setup     |
 
 ## Meeting Creation Flow
 
@@ -87,6 +88,33 @@ copyable links:
 
 Admin access uses the same membership-secret-link model as every other
 person-meeting relationship. There is no separate admin token model.
+
+## Admin Calendar Constraint Painter
+
+`/join/[membershipToken]` resolves the membership token through Convex and shows
+the Stage 3 admin painter when the membership can administer the meeting. Admin
+permission comes from the membership role and the meeting's `everyoneAdmin`
+setting. The raw membership token is not rendered in the page.
+
+The painter lets admins:
+
+- review meeting title, lifecycle state, canonical timezone, duration, and
+  granularity
+- paint broad allowed or blocked regions on a stable responsive calendar grid
+- use brush controls for allow, block/erase, and preview selection
+- fill weekday business hours, clear weekends, clear weekday mornings or
+  afternoons, and clear all painted cells
+- save painted cells back to Convex through `updateMeetingSettings`
+
+The grid is generated from the meeting timezone, granularity, duration, and
+existing allowed ranges. Stage 2 custom presets are bounded to 42 days so admins
+do not land on unmanageably large paint surfaces. Conversion helpers keep UI
+cells and stored `allowedTimeRanges` aligned to timezone-aware UTC instants.
+Client validation warns when painted regions are empty or too short for the full
+meeting duration, while the Convex domain normalization remains authoritative.
+
+Non-admin memberships can view the constraints but cannot edit them. Finalized
+meetings are read-only until reopened by the backend lifecycle flow.
 
 ## Environment
 
@@ -162,8 +190,8 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 2 intentionally does not implement the full admin calendar constraint
-painter, participant availability painter, recommendation engine, passwordless
-email identity, notification delivery, cookie-backed anonymous recovery,
-finalization workflow, or AI-agent APIs. The creation flow is link-based for now:
-the creator must keep their personal admin membership URL.
+Stage 3 intentionally does not implement participant availability painting,
+recommendation ranking, passwordless email identity UI, notification delivery,
+cookie-backed anonymous recovery, finalization UI, or AI-agent APIs. The creation
+and admin-editing flows are link-based for now: the creator must keep their
+personal admin membership URL.

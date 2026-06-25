@@ -28,6 +28,8 @@ export type BuildAllowedTimeRangesInput = {
   customRange?: CustomDailyRangeInput;
 };
 
+export const MAX_CUSTOM_RANGE_DAYS = 42;
+
 export function buildAllowedTimeRanges({
   presetId,
   timeZone,
@@ -86,6 +88,9 @@ export function buildCustomDailyRanges(
 
   const dayCount =
     Math.round((dateKeyToUtcMs(toDate) - dateKeyToUtcMs(fromDate)) / dayMs) + 1;
+  if (dayCount > MAX_CUSTOM_RANGE_DAYS) {
+    throw new Error(`Custom range cannot exceed ${MAX_CUSTOM_RANGE_DAYS} days`);
+  }
 
   return buildDailyRanges({
     fromDate,
@@ -138,7 +143,11 @@ function buildDailyRanges({
   return ranges;
 }
 
-function zonedWallTimeToUtc(dateKey: string, timeKey: string, timeZone: string): Date {
+export function zonedWallTimeToUtc(
+  dateKey: string,
+  timeKey: string,
+  timeZone: string,
+): Date {
   const date = parseDateKey(dateKey, "date");
   const time = parseTimeKey(timeKey, "time");
   const wallTimeMs = Date.UTC(
@@ -203,7 +212,7 @@ function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   return zonedAsUtc - date.getTime();
 }
 
-function getDateKeyInTimeZone(date: Date, timeZone: string): string {
+export function getDateKeyInTimeZone(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -216,13 +225,13 @@ function getDateKeyInTimeZone(date: Date, timeZone: string): string {
   )}`;
 }
 
-function addDaysToDateKey(dateKey: string, days: number): string {
+export function addDaysToDateKey(dateKey: string, days: number): string {
   const date = parseDateKey(dateKey, "date");
   const next = new Date(dateKeyToUtcMs(date) + days * dayMs);
   return next.toISOString().slice(0, 10);
 }
 
-function isWeekend(dateKey: string): boolean {
+export function isWeekend(dateKey: string): boolean {
   const day = new Date(dateKeyToUtcMs(dateKey)).getUTCDay();
   return day === 0 || day === 6;
 }
@@ -236,7 +245,7 @@ function dateKeyToUtcMs(dateKey: string): number {
   );
 }
 
-function timeKeyToMinutes(timeKey: string): number {
+export function timeKeyToMinutes(timeKey: string): number {
   const time = parseTimeKey(timeKey, "time");
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }

@@ -52,6 +52,6 @@ export const routeMap = [
   },
   {
     path: "/join/[membershipToken]",
-    purpose: "Secret membership link route for members and admins.",
+    purpose: "Secret membership link route for admin setup and later member tools.",
   },
 ] as const;

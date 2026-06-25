@@ -94,4 +94,19 @@ describe("allowed time presets", () => {
       ),
     ).toThrow(/does not exist/u);
   });
+
+  it("bounds custom ranges to keep later calendar grids manageable", () => {
+    expect(() =>
+      buildCustomDailyRanges(
+        {
+          fromDate: "2026-06-01",
+          toDate: "2026-07-20",
+          startTime: "09:00",
+          endTime: "17:00",
+          includeWeekends: true,
+        },
+        "UTC",
+      ),
+    ).toThrow(/cannot exceed 42 days/u);
+  });
 });
