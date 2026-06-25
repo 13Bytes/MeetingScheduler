@@ -96,6 +96,19 @@ describe("allowed time presets", () => {
   });
 
   it("bounds custom ranges to keep later calendar grids manageable", () => {
+    expect(
+      buildCustomDailyRanges(
+        {
+          fromDate: "2026-06-01",
+          toDate: "2026-07-12",
+          startTime: "09:00",
+          endTime: "17:00",
+          includeWeekends: true,
+        },
+        "UTC",
+      ),
+    ).toHaveLength(42);
+
     expect(() =>
       buildCustomDailyRanges(
         {

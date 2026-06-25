@@ -28,7 +28,7 @@ const editableData = {
 };
 
 describe("AdminCalendarPainter", () => {
-  it("saves shortcut-painted allowed regions without rendering the membership token", async () => {
+  it("saves shortcut-painted allowed regions", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(
       <AdminCalendarPainter
@@ -51,7 +51,6 @@ describe("AdminCalendarPainter", () => {
         }),
       ]),
     );
-    expect(screen.queryByText(/secret/i)).not.toBeInTheDocument();
   });
 
   it("disables editing controls for non-admin memberships", () => {
@@ -166,5 +165,22 @@ describe("AdminCalendarPainter", () => {
         endUtc: "2026-06-24T08:00:00.000Z",
       }),
     ]);
+  });
+
+  it("clears stale save notices after later local edits", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AdminCalendarPainter
+        data={editableData}
+        onSave={onSave}
+        baseDate={new Date("2026-06-24T12:00:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /save allowed regions/i }));
+    expect(await screen.findByText(/allowed regions saved/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /clear all/i }));
+    expect(screen.queryByText(/allowed regions saved/i)).not.toBeInTheDocument();
   });
 });

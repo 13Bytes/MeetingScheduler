@@ -17,7 +17,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { AllowedTimeRangeDraft } from "@/lib/meeting-presets";
 import {
-  allowedCellKeysToRanges,
+  allowedCellKeysToRangesForSave,
   buildCalendarGrid,
   createInitialPaintState,
   paintReducer,
@@ -158,8 +158,13 @@ export function AdminCalendarPainter({
     createInitialPaintState,
   );
   const ranges = useMemo(
-    () => allowedCellKeysToRanges(grid, paintState.allowedCellKeys),
-    [grid, paintState.allowedCellKeys],
+    () =>
+      allowedCellKeysToRangesForSave(
+        grid,
+        paintState.allowedCellKeys,
+        meeting.allowedTimeRanges,
+      ),
+    [grid, meeting.allowedTimeRanges, paintState.allowedCellKeys],
   );
   const validation = useMemo(
     () => validatePaintedRanges(ranges, meeting.durationMinutes),
@@ -268,6 +273,8 @@ export function AdminCalendarPainter({
               onCommit={() => dispatch({ type: "commit" })}
               onCancel={() => dispatch({ type: "cancel" })}
               onApplyCell={(cellKey) => {
+                setError(null);
+                setNotice(null);
                 if (mode === "preview") {
                   dispatch({ type: "begin", cellKey, mode });
                   return;
@@ -324,7 +331,11 @@ export function AdminCalendarPainter({
                 type="button"
                 variant="ghost"
                 disabled={!canEdit}
-                onClick={() => dispatch({ type: "replace", allowedCellKeys: [] })}
+                onClick={() => {
+                  setError(null);
+                  setNotice(null);
+                  dispatch({ type: "replace", allowedCellKeys: [] });
+                }}
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
                 Clear all

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allowedCellKeysToRanges,
+  allowedCellKeysToRangesForSave,
   buildCalendarGrid,
   createInitialPaintState,
   paintReducer,
@@ -182,6 +183,31 @@ describe("range conversion and shortcuts", () => {
         label: "Painted 2026-06-25",
       },
     ]);
+  });
+
+  it("preserves unchanged ranges that cross a fall-back DST boundary", () => {
+    const originalRanges = [
+      {
+        startUtc: "2026-11-01T04:00:00.000Z",
+        endUtc: "2026-11-01T09:00:00.000Z",
+        timeZone: "America/New_York",
+        label: "DST crossing",
+      },
+    ];
+    const grid = buildCalendarGrid({
+      timeZone: "America/New_York",
+      granularityMinutes: 30,
+      durationMinutes: 60,
+      allowedTimeRanges: originalRanges,
+      baseDate: new Date("2026-11-01T12:00:00.000Z"),
+      minDays: 1,
+      maxDays: 1,
+    });
+    const allowed = rangesToAllowedCellKeys(grid, originalRanges);
+
+    expect(allowedCellKeysToRangesForSave(grid, allowed, originalRanges)).toEqual(
+      originalRanges,
+    );
   });
 
   it("validates that painted regions can contain the full duration", () => {

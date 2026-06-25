@@ -257,6 +257,32 @@ export function allowedCellKeysToRanges(
   return ranges;
 }
 
+export function allowedCellKeysToRangesForSave(
+  grid: CalendarGrid,
+  allowedCellKeys: Iterable<string>,
+  originalRanges: AllowedTimeRangeDraft[],
+): AllowedTimeRangeDraft[] {
+  const remainingCellKeys = new Set(allowedCellKeys);
+  const preservedRanges: AllowedTimeRangeDraft[] = [];
+
+  for (const originalRange of originalRanges) {
+    const originalCellKeys = rangesToAllowedCellKeys(grid, [originalRange]);
+    if (
+      originalCellKeys.size > 0 &&
+      Array.from(originalCellKeys).every((cellKey) => remainingCellKeys.has(cellKey))
+    ) {
+      preservedRanges.push(originalRange);
+      for (const cellKey of originalCellKeys) {
+        remainingCellKeys.delete(cellKey);
+      }
+    }
+  }
+
+  return [...preservedRanges, ...allowedCellKeysToRanges(grid, remainingCellKeys)].sort(
+    (left, right) => Date.parse(left.startUtc) - Date.parse(right.startUtc),
+  );
+}
+
 export function validatePaintedRanges(
   ranges: AllowedTimeRangeDraft[],
   durationMinutes: number,
