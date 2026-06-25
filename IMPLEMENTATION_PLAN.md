@@ -23,7 +23,13 @@ collaboration, and later AI-agent-friendly APIs.
    - Add Convex tables, domain validation, permission helpers, lifecycle
      transitions, token handling, and foundational mutations/queries.
 3. **Stage 2: Meeting Creation**
-   - Add meeting creation forms and connect the UI to the Stage 1 functions.
+   - Replace `/new` with a usable anonymous meeting creation form.
+   - Generate broad allowed time ranges from shortcuts instead of implementing
+     the final calendar painter.
+   - Connect the UI to the Stage 1 Convex creation function.
+   - Show the creator's personal admin membership link and public participant
+     link after creation.
+   - Keep cookie-backed anonymous recovery for a later stage.
 4. **Stage 3: Availability Collaboration**
    - Add realtime availability painting and participant state.
 5. **Stage 4: Finalization and Notifications**

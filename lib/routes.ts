@@ -2,11 +2,40 @@ export const routes = {
   home: "/",
   newMeeting: "/new",
   meetingPoll: (meetingSlug: string) => `/m/${encodeURIComponent(meetingSlug)}`,
-  meetingAdmin: (meetingSlug: string, adminToken: string) =>
-    `/m/${encodeURIComponent(meetingSlug)}/admin/${encodeURIComponent(adminToken)}`,
   membershipLink: (membershipToken: string) =>
     `/join/${encodeURIComponent(membershipToken)}`,
 } as const;
+
+export function buildAbsoluteAppUrl(path: string, origin: string): string {
+  if (!path.startsWith("/")) {
+    throw new Error("App paths must start with /");
+  }
+
+  return new URL(path, normalizeOrigin(origin)).toString();
+}
+
+export function buildCreatedMeetingLinks({
+  origin,
+  meetingSlug,
+  adminMembershipToken,
+}: {
+  origin: string;
+  meetingSlug: string;
+  adminMembershipToken: string;
+}) {
+  return {
+    publicParticipantUrl: buildAbsoluteAppUrl(routes.meetingPoll(meetingSlug), origin),
+    adminMembershipUrl: buildAbsoluteAppUrl(
+      routes.membershipLink(adminMembershipToken),
+      origin,
+    ),
+  };
+}
+
+function normalizeOrigin(origin: string): string {
+  const parsed = new URL(origin);
+  return `${parsed.protocol}//${parsed.host}`;
+}
 
 export const routeMap = [
   {
@@ -15,18 +44,14 @@ export const routeMap = [
   },
   {
     path: routes.newMeeting,
-    purpose: "Future meeting creation flow.",
+    purpose: "Anonymous meeting creation flow.",
   },
   {
     path: "/m/[meetingSlug]",
     purpose: "Future public meeting poll and availability collaboration route.",
   },
   {
-    path: "/m/[meetingSlug]/admin/[adminToken]",
-    purpose: "Future organizer route reached by secret admin link.",
-  },
-  {
     path: "/join/[membershipToken]",
-    purpose: "Future secret membership link route.",
+    purpose: "Secret membership link route for members and admins.",
   },
 ] as const;

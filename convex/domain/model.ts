@@ -99,6 +99,9 @@ export function normalizeMeetingSettings(
   const allowedTimeRanges = (input.allowedTimeRanges ?? []).map((range) =>
     normalizeAllowedTimeRange(range, canonicalTimeZone),
   );
+  for (const range of allowedTimeRanges) {
+    assertAllowedTimeRangeCompatibility(range, durationMinutes, granularityMinutes);
+  }
 
   return {
     canonicalTimeZone,
@@ -106,6 +109,17 @@ export function normalizeMeetingSettings(
     durationMinutes,
     allowedTimeRanges,
   };
+}
+
+export function normalizeMeetingTitle(title: string): string {
+  const normalized = title.trim();
+  if (!normalized) {
+    throw new Error("Meeting title is required");
+  }
+  if (normalized.length > 160) {
+    throw new Error("Meeting title must be 160 characters or fewer");
+  }
+  return normalized;
 }
 
 export function normalizeAllowedTimeRange(
@@ -225,6 +239,25 @@ export function assertAvailabilityCellAlignment(
     !isOnLocalGridBoundary(endParts, granularityMinutes)
   ) {
     throw new Error("Availability cell boundaries must align to the meeting grid");
+  }
+}
+
+export function assertAllowedTimeRangeCompatibility(
+  range: AllowedTimeRange,
+  durationMinutes: number,
+  granularityMinutes: number,
+): void {
+  assertAvailabilityCellAlignment(
+    range.startUtc,
+    range.endUtc,
+    granularityMinutes,
+    range.timeZone,
+  );
+
+  const rangeDurationMinutes =
+    (Date.parse(range.endUtc) - Date.parse(range.startUtc)) / (60 * 1000);
+  if (rangeDurationMinutes < durationMinutes) {
+    throw new Error("Allowed time range must be at least as long as the meeting");
   }
 }
 

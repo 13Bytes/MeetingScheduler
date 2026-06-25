@@ -31,19 +31,19 @@ export default function HomePage() {
     <AppShell>
       <section className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)] lg:items-start">
         <div className="space-y-6">
-          <Badge variant="accent">Stage 0 foundation</Badge>
+          <Badge variant="accent">Stage 2 creation flow</Badge>
           <div className="space-y-4">
             <h1 className="max-w-3xl text-4xl font-semibold tracking-normal text-foreground sm:text-5xl">
               Meeting Scheduler
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-slate-600">
-              A deployable Next.js, TypeScript, Convex, and Tailwind base for a
-              collaborative scheduling app.
+              Create a Doodle-style poll without an account, then share a public
+              participant link and keep your personal admin membership link.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild>
-              <Link href={routes.newMeeting}>Start placeholder</Link>
+              <Link href={routes.newMeeting}>Create a meeting</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link href={routes.meetingPoll("demo-poll")}>View poll placeholder</Link>
