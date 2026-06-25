@@ -59,6 +59,10 @@ export const createMeeting = mutation({
     const now = Date.now();
     const title = normalizeMeetingTitle(args.title);
     const settings = normalizeMeetingSettings(args.settings);
+    if (settings.allowedTimeRanges.length === 0) {
+      throw new Error("Meeting creation requires at least one allowed time range");
+    }
+
     const adminToken = await createSecretToken("membership");
     const slugBase = slugifyMeetingTitle(args.slug ?? title);
     const slug =

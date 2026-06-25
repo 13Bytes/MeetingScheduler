@@ -275,6 +275,9 @@ describe("schema-adjacent helpers", () => {
   it("normalizes slugs and email identities", () => {
     expect(normalizeMeetingTitle("  Team Planning  ")).toBe("Team Planning");
     expect(() => normalizeMeetingTitle("   ")).toThrow(/title is required/u);
+    expect(() => normalizeMeetingTitle("A".repeat(161))).toThrow(
+      /160 characters or fewer/u,
+    );
     expect(slugifyMeetingTitle("  Team Planning / Q3!  ")).toBe("team-planning-q3");
     expect(normalizeEmailAddress("  Ada@Example.COM ")).toBe("ada@example.com");
     expect(() => normalizeEmailAddress("not-email")).toThrow(

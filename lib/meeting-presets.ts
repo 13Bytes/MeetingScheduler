@@ -152,7 +152,32 @@ function zonedWallTimeToUtc(dateKey: string, timeKey: string, timeZone: string):
   );
   const firstGuess = wallTimeMs - getTimeZoneOffsetMs(new Date(wallTimeMs), timeZone);
   const secondGuess = wallTimeMs - getTimeZoneOffsetMs(new Date(firstGuess), timeZone);
-  return new Date(secondGuess);
+  const result = new Date(secondGuess);
+  const roundTrip = getZonedDateTimeKey(result, timeZone);
+  if (roundTrip.dateKey !== date || roundTrip.timeKey !== time) {
+    throw new Error(`Local time ${date} ${time} does not exist in ${timeZone}`);
+  }
+  return result;
+}
+
+function getZonedDateTimeKey(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
+  return {
+    dateKey: `${valueByType.get("year")}-${valueByType.get(
+      "month",
+    )}-${valueByType.get("day")}`,
+    timeKey: `${valueByType.get("hour")}:${valueByType.get("minute")}`,
+  };
 }
 
 function getTimeZoneOffsetMs(date: Date, timeZone: string): number {

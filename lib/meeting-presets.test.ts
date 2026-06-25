@@ -32,6 +32,14 @@ describe("allowed time presets", () => {
   });
 
   it("validates custom daily ranges", () => {
+    expect(() =>
+      buildAllowedTimeRanges({
+        presetId: "custom-daily-range",
+        timeZone: "UTC",
+        baseDate: new Date("2026-06-24T12:00:00.000Z"),
+      }),
+    ).toThrow(/Custom range details are required/u);
+
     expect(
       buildCustomDailyRanges(
         {
@@ -70,5 +78,20 @@ describe("allowed time presets", () => {
         "UTC",
       ),
     ).toThrow(/end date/u);
+  });
+
+  it("rejects custom wall times that do not exist in the timezone", () => {
+    expect(() =>
+      buildCustomDailyRanges(
+        {
+          fromDate: "2026-03-08",
+          toDate: "2026-03-08",
+          startTime: "02:30",
+          endTime: "03:30",
+          includeWeekends: true,
+        },
+        "America/New_York",
+      ),
+    ).toThrow(/does not exist/u);
   });
 });

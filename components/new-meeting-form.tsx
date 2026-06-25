@@ -12,8 +12,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import type { AllowedTimeRangeDraft, AllowedTimePresetId } from "@/lib/meeting-presets";
 import { buildAllowedTimeRanges } from "@/lib/meeting-presets";
 import { buildCreatedMeetingLinks } from "@/lib/routes";
@@ -42,12 +40,6 @@ type CreateMeetingResult = {
   slug: string;
   adminMembershipToken: string;
 };
-
-export function ConnectedNewMeetingForm() {
-  const createMeeting = useMutation(api.meetings.createMeeting);
-
-  return <NewMeetingForm createMeeting={(args) => createMeeting(args)} />;
-}
 
 export function NewMeetingForm({
   createMeeting,
