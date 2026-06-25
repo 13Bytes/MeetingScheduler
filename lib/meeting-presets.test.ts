@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildAllowedTimeRanges, buildCustomDailyRanges } from "@/lib/meeting-presets";
+import {
+  MAX_CUSTOM_RANGE_DAYS,
+  buildAllowedTimeRanges,
+  buildCustomDailyRanges,
+} from "@/lib/meeting-presets";
 
 describe("allowed time presets", () => {
   it("builds weekday business ranges in the meeting timezone", () => {
@@ -107,7 +111,7 @@ describe("allowed time presets", () => {
         },
         "UTC",
       ),
-    ).toHaveLength(42);
+    ).toHaveLength(MAX_CUSTOM_RANGE_DAYS);
 
     expect(() =>
       buildCustomDailyRanges(
@@ -120,6 +124,6 @@ describe("allowed time presets", () => {
         },
         "UTC",
       ),
-    ).toThrow(/cannot exceed 42 days/u);
+    ).toThrow(new RegExp(`cannot exceed ${MAX_CUSTOM_RANGE_DAYS} days`, "u"));
   });
 });
