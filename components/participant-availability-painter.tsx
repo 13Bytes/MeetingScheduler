@@ -18,9 +18,11 @@ import type React from "react";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { AdminCalendarPainter } from "@/components/admin-calendar-painter";
+import { MeetingResultsPanel } from "@/components/meeting-results-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { MeetingResults } from "@/lib/meeting-results";
 import type { AllowedTimeRangeDraft } from "@/lib/meeting-presets";
 import {
   availabilityPaintReducer,
@@ -76,6 +78,7 @@ type ParticipantData = {
   membership?: MembershipSummary;
   capabilities: MembershipCapabilities;
   ownAvailabilityRecords: PersistedAvailabilityRecord[];
+  results?: MeetingResults;
 };
 
 type SaveAvailability = (
@@ -455,6 +458,13 @@ export function ParticipantAvailabilityPainter({
         <PermissionPanel
           title="Finalized meeting"
           description="Responses are read-only until an admin reopens the poll."
+        />
+      ) : null}
+
+      {data.results ? (
+        <MeetingResultsPanel
+          results={data.results}
+          canAdminister={data.capabilities.canAdminister}
         />
       ) : null}
 

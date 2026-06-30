@@ -21,6 +21,11 @@ import {
 import type { MembershipRole, PrivacyMode } from "./domain/model";
 import { createSecretToken, hashSecretToken } from "./domain/tokens";
 import {
+  buildMeetingResults,
+  canViewerReadDetailedResults,
+  type ResultParticipant,
+} from "./domain/results";
+import {
   adminModeValidator,
   availabilityResponseValidator,
   finalizedSlotValidator,
@@ -181,9 +186,12 @@ export const readPublicMeetingBySlug = query({
       return null;
     }
 
+    const results = await buildResultsForMeeting(ctx, meeting, null);
+
     return {
       meeting: redactPublicMeeting(meeting),
       capabilities: getMembershipCapabilities(meeting, null),
+      results,
     };
   },
 });
@@ -203,10 +211,13 @@ export const readMeetingByMembershipToken = query({
       return null;
     }
 
+    const results = await buildResultsForMeeting(ctx, meeting, membership);
+
     return {
       meeting,
       membership: redactMembership(membership),
       capabilities: getMembershipCapabilities(meeting, membership),
+      results,
     };
   },
 });
@@ -231,11 +242,14 @@ export const readParticipantMeetingByMembershipToken = query({
       .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
       .collect();
 
+    const results = await buildResultsForMeeting(ctx, meeting, membership);
+
     return {
       meeting: redactPublicMeeting(meeting),
       membership: redactParticipantMembership(membership),
       capabilities: getMembershipCapabilities(meeting, membership),
       ownAvailabilityRecords,
+      results,
     };
   },
 });
@@ -712,14 +726,37 @@ export const listAvailabilityByMeeting = query({
     }
 
     const meeting = await requireMeeting(ctx, membership.meetingId);
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
+      .collect();
+    const participants: ResultParticipant[] = memberships.map((candidate) => ({
+      membershipId: candidate._id,
+      displayName: candidate.displayName,
+      role: candidate.role,
+      privacyMode: candidate.privacyMode,
+      revokedAt: candidate.revokedAt,
+    }));
+    const includeAllRecords = canViewerReadDetailedResults({
+      viewer:
+        participants.find((candidate) => candidate.membershipId === membership._id) ??
+        null,
+      participants,
+      canAdminister: getMembershipCapabilities(meeting, membership).canAdminister,
+    });
     const records = await ctx.db
       .query("availabilityRecords")
-      .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
+      .withIndex(includeAllRecords ? "by_meeting" : "by_membership", (q) =>
+        includeAllRecords
+          ? q.eq("meetingId", meeting._id)
+          : q.eq("membershipId", membership._id),
+      )
       .collect();
 
     return {
       meetingId: meeting._id,
       requestingMembership: redactMembership(membership),
+      visibility: includeAllRecords ? "detailed" : "ownOnly",
       records,
     };
   },
@@ -751,6 +788,77 @@ export const consumeMagicLink = mutation({
     };
   },
 });
+
+async function buildResultsForMeeting(
+  ctx: QueryLikeCtx,
+  meeting: {
+    _id: Id<"meetings">;
+    adminMode: "roleBased" | "everyoneAdmin";
+    lifecycleState: "open" | "finalized";
+    canonicalTimeZone: string;
+    granularityMinutes: number;
+    durationMinutes: number;
+    allowedTimeRanges: {
+      startUtc: string;
+      endUtc: string;
+      timeZone: string;
+      label?: string;
+    }[];
+    updatedAt: number;
+  },
+  viewer: {
+    _id: Id<"memberships">;
+    displayName?: string;
+    role: MembershipRole;
+    privacyMode: PrivacyMode;
+    revokedAt?: number;
+    updatedAt: number;
+  } | null,
+) {
+  const memberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
+    .collect();
+  const availabilityRecords = await ctx.db
+    .query("availabilityRecords")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
+    .collect();
+  const participants: ResultParticipant[] = memberships.map((membership) => ({
+    membershipId: membership._id,
+    displayName: membership.displayName,
+    role: membership.role,
+    privacyMode: membership.privacyMode,
+    revokedAt: membership.revokedAt,
+  }));
+  const viewerParticipant = viewer
+    ? participants.find((participant) => participant.membershipId === viewer._id)
+    : null;
+  const includeDetails = canViewerReadDetailedResults({
+    viewer: viewerParticipant,
+    participants,
+    canAdminister: getMembershipCapabilities(meeting, viewer).canAdminister,
+  });
+  const generatedAt = Math.max(
+    meeting.updatedAt,
+    ...memberships.map((membership) => membership.updatedAt),
+    ...availabilityRecords.map((record) => record.updatedAt),
+  );
+
+  return buildMeetingResults({
+    allowedTimeRanges: meeting.allowedTimeRanges,
+    participants,
+    availabilityRecords: availabilityRecords.map((record) => ({
+      membershipId: record.membershipId,
+      cellKey: record.cellKey,
+      response: record.response,
+    })),
+    granularityMinutes: meeting.granularityMinutes,
+    durationMinutes: meeting.durationMinutes,
+    timeZone: meeting.canonicalTimeZone,
+    generatedAt,
+    includeDetails,
+  });
+}
 
 async function findMembershipByToken(ctx: QueryLikeCtx, membershipToken: string) {
   const tokenHash = await hashSecretToken(membershipToken);

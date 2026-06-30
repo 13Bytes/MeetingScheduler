@@ -1,10 +1,10 @@
 # Meeting Scheduler
 
-A Stage 4 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 5 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
 backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
 meeting creation flow, an admin calendar constraint painter, and participant
-availability painting.
+availability painting with live result recommendations.
 
 ## Stack
 
@@ -20,7 +20,8 @@ Stage 1 defines the backend/domain foundation. Stage 2 adds the first
 user-facing creation flow. Stage 3 adds the admin setup/editing experience for
 painting broad allowed candidate time regions. Stage 4 adds the participant
 join/return flow for painting yes, reluctant, no, or unset availability over
-admin-allowed cells.
+admin-allowed cells. Stage 5 adds realtime candidate scoring, recommendation
+ranking, and privacy-aware result display.
 
 Core Convex tables:
 
@@ -141,10 +142,30 @@ saves require an active membership, an open meeting, grid-aligned cell
 boundaries, and cells inside the allowed ranges. Finalized polls are read-only
 until reopened.
 
-Stage 4 intentionally keeps results modest. The UI shows the participant's own
-response and public meeting details, while recommendation ranking, candidate
-slot scoring, organizer finalization UI, passwordless email identity, and email
-notification delivery remain deferred.
+## Realtime Results and Recommendations
+
+Stage 5 derives candidate meeting slots from the admin-allowed cell ranges using
+the meeting duration and granularity. A participant counts as available for a
+candidate only when every covered cell is `yes` or `reluctant`; any `no` or
+unset cell makes that participant unavailable for that candidate.
+
+Candidates are ranked by:
+
+1. Most participants able to attend, where `yes` and `reluctant` both count.
+2. Fewest reluctant votes across the covered candidate cells.
+3. Earliest start time as a stable tie-breaker.
+
+Convex meeting reads include derived results built from current memberships and
+availability records, so public and membership views update as responses change.
+The participant screen shows a recommended shortlist and compact score heatmap.
+Membership/admin views can show participant names and individual details when
+privacy permits. Public viewers and summary-only participant views receive
+aggregate counts and scores only; admins can see details when their membership
+has admin capability.
+
+Stage 5 still only recommends and visualizes. Admin finalization, passwordless
+email identity UI, email notification delivery, cookie-backed anonymous
+recovery, and AI-agent APIs remain deferred.
 
 ## Environment
 
@@ -191,8 +212,8 @@ npm run convex:dev
 ```
 
 Convex codegen and live validation require a configured `CONVEX_DEPLOYMENT`.
-Without that environment value, `npx convex codegen` exits before checking the
-local functions.
+Without that environment value, `npx convex codegen` exits with
+`No CONVEX_DEPLOYMENT set` before checking the local functions.
 
 Lint:
 
@@ -220,8 +241,8 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 4 intentionally does not implement recommendation ranking, passwordless
-email identity UI, notification delivery, cookie-backed anonymous recovery,
-finalization UI, or AI-agent APIs. The creation, admin-editing, and participant
-return flows are link-based for now: each person must keep their personal
+Stage 5 intentionally does not implement organizer finalization workflow,
+passwordless email identity UI, notification delivery, cookie-backed anonymous
+recovery, or AI-agent APIs. The creation, admin-editing, participant return, and
+results flows are link-based for now: each person must keep their personal
 membership URL.
