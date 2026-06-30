@@ -106,6 +106,7 @@ describe("ParticipantAvailabilityPainter", () => {
     fireEvent.click(screen.getByRole("button", { name: /join and save/i }));
 
     expect(await screen.findByText(/joined meeting/i)).toBeInTheDocument();
+    expect(onCreateMembership).toHaveBeenCalledWith("Ada Lovelace");
     expect(onSaveAvailability).not.toHaveBeenCalled();
   });
 
