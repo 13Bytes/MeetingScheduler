@@ -1,7 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MeetingResultsPanel } from "@/components/meeting-results-panel";
-import type { MeetingResults } from "@/lib/meeting-results";
+import type { MeetingResults, ScoredCandidateSlot } from "@/lib/meeting-results";
+
+const candidateFixture: ScoredCandidateSlot = {
+  startUtc: "2026-06-25T07:00:00.000Z",
+  endUtc: "2026-06-25T08:00:00.000Z",
+  timeZone: "Europe/Berlin",
+  coveredCellKeys: [
+    "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+    "2026-06-25T07:30:00.000Z_2026-06-25T08:00:00.000Z",
+  ],
+  availableParticipantCount: 2,
+  unavailableParticipantCount: 0,
+  totalParticipantCount: 2,
+  reluctantVoteCount: 1,
+  yesVoteCount: 3,
+  scorePercent: 100,
+  rank: 1,
+  participantDetails: [
+    {
+      membershipId: "alice",
+      displayName: "Alice",
+      responses: ["yes", "yes"],
+      reluctantCount: 0,
+    },
+    {
+      membershipId: "bruno",
+      displayName: "Bruno",
+      responses: ["yes", "reluctant"],
+      reluctantCount: 1,
+    },
+  ],
+};
 
 const detailedResults: MeetingResults = {
   generatedAt: 123,
@@ -11,41 +42,9 @@ const detailedResults: MeetingResults = {
   totalParticipantCount: 2,
   candidateCount: 1,
   detailsVisible: true,
-  candidates: [
-    {
-      startUtc: "2026-06-25T07:00:00.000Z",
-      endUtc: "2026-06-25T08:00:00.000Z",
-      timeZone: "Europe/Berlin",
-      coveredCellKeys: [
-        "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
-        "2026-06-25T07:30:00.000Z_2026-06-25T08:00:00.000Z",
-      ],
-      availableParticipantCount: 2,
-      unavailableParticipantCount: 0,
-      totalParticipantCount: 2,
-      reluctantVoteCount: 1,
-      yesVoteCount: 3,
-      scorePercent: 100,
-      rank: 1,
-      participantDetails: [
-        {
-          membershipId: "alice",
-          displayName: "Alice",
-          responses: ["yes", "yes"],
-          reluctantCount: 0,
-        },
-        {
-          membershipId: "bruno",
-          displayName: "Bruno",
-          responses: ["yes", "reluctant"],
-          reluctantCount: 1,
-        },
-      ],
-    },
-  ],
-  shortlist: [],
+  candidates: [candidateFixture],
+  shortlist: [candidateFixture],
 };
-detailedResults.shortlist = detailedResults.candidates;
 
 describe("MeetingResultsPanel", () => {
   it("shows a recommended shortlist and detailed participant names when provided", () => {

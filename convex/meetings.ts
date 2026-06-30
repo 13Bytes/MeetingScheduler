@@ -744,6 +744,11 @@ export const listAvailabilityByMeeting = query({
       participants,
       canAdminister: getMembershipCapabilities(meeting, membership).canAdminister,
     });
+    const activeMembershipIds = new Set(
+      participants
+        .filter((candidate) => candidate.revokedAt === undefined)
+        .map((candidate) => candidate.membershipId),
+    );
     const records = await ctx.db
       .query("availabilityRecords")
       .withIndex(includeAllRecords ? "by_meeting" : "by_membership", (q) =>
@@ -757,7 +762,9 @@ export const listAvailabilityByMeeting = query({
       meetingId: meeting._id,
       requestingMembership: redactMembership(membership),
       visibility: includeAllRecords ? "detailed" : "ownOnly",
-      records,
+      records: includeAllRecords
+        ? records.filter((record) => activeMembershipIds.has(record.membershipId))
+        : records,
     };
   },
 });

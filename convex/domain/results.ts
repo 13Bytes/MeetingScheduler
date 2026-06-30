@@ -261,12 +261,20 @@ export function canViewerReadDetailedResults({
   if (canAdminister) {
     return true;
   }
-  if (!viewer || viewer.revokedAt !== undefined || viewer.privacyMode !== "detailed") {
+  const activeParticipants = participants.filter(
+    (participant) => participant.revokedAt === undefined,
+  );
+  const activeViewer = viewer
+    ? activeParticipants.find(
+        (participant) => participant.membershipId === viewer.membershipId,
+      )
+    : null;
+  if (!activeViewer || activeViewer.privacyMode !== "detailed") {
     return false;
   }
-  return participants
-    .filter((participant) => participant.revokedAt === undefined)
-    .every((participant) => participant.privacyMode === "detailed");
+  return activeParticipants.every(
+    (participant) => participant.privacyMode === "detailed",
+  );
 }
 
 export function redactMeetingResults(results: MeetingResults): MeetingResults {

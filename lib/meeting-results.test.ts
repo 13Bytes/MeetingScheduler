@@ -5,8 +5,10 @@ import {
   generateCandidateSlots,
   makeResultCellKey,
   rankScoredCandidates,
+  redactMeetingResults,
   scoreCandidate,
   type CandidateSlot,
+  type MeetingResults,
   type ResultAvailabilityRecord,
   type ResultParticipant,
 } from "@/lib/meeting-results";
@@ -289,5 +291,83 @@ describe("result privacy", () => {
         canAdminister: false,
       }),
     ).toBe(false);
+  });
+
+  it("hides details from non-admin viewers who are not active participants", () => {
+    expect(
+      canViewerReadDetailedResults({
+        viewer: {
+          membershipId: "outsider",
+          role: "member",
+          privacyMode: "detailed",
+        },
+        participants,
+        canAdminister: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("redacts participant details from candidates and shortlist", () => {
+    const detailedResults: MeetingResults = {
+      generatedAt: 123,
+      timeZone: "Europe/Berlin",
+      granularityMinutes: 30,
+      durationMinutes: 60,
+      totalParticipantCount: 1,
+      candidateCount: 1,
+      detailsVisible: true,
+      candidates: [
+        {
+          startUtc: "2026-06-25T07:00:00.000Z",
+          endUtc: "2026-06-25T08:00:00.000Z",
+          timeZone: "Europe/Berlin",
+          coveredCellKeys: ["2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z"],
+          availableParticipantCount: 1,
+          unavailableParticipantCount: 0,
+          totalParticipantCount: 1,
+          reluctantVoteCount: 0,
+          yesVoteCount: 1,
+          scorePercent: 100,
+          rank: 1,
+          participantDetails: [
+            {
+              membershipId: "alice",
+              displayName: "Alice",
+              responses: ["yes"],
+              reluctantCount: 0,
+            },
+          ],
+        },
+      ],
+      shortlist: [
+        {
+          startUtc: "2026-06-25T07:00:00.000Z",
+          endUtc: "2026-06-25T08:00:00.000Z",
+          timeZone: "Europe/Berlin",
+          coveredCellKeys: ["2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z"],
+          availableParticipantCount: 1,
+          unavailableParticipantCount: 0,
+          totalParticipantCount: 1,
+          reluctantVoteCount: 0,
+          yesVoteCount: 1,
+          scorePercent: 100,
+          rank: 1,
+          participantDetails: [
+            {
+              membershipId: "alice",
+              displayName: "Alice",
+              responses: ["yes"],
+              reluctantCount: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    const redacted = redactMeetingResults(detailedResults);
+
+    expect(redacted.detailsVisible).toBe(false);
+    expect(redacted.candidates[0].participantDetails).toBeUndefined();
+    expect(redacted.shortlist[0].participantDetails).toBeUndefined();
   });
 });

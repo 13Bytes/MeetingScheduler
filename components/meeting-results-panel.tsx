@@ -177,6 +177,7 @@ function HeatmapBar({
           style={{ width: `${Math.max(candidate.scorePercent, 4)}%` }}
         />
       </div>
+      <span className="sr-only">{candidate.scorePercent}% match score</span>
     </div>
   );
 }
