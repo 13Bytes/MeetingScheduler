@@ -1,6 +1,6 @@
 import { KeyRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ConnectedAdminCalendarPainter } from "@/components/admin-calendar-painter";
+import { ConnectedMembershipAvailability } from "@/components/participant-availability-painter";
 import { RoutePlaceholder } from "@/components/route-placeholder";
 
 export default async function JoinByMembershipLinkPage({
@@ -14,13 +14,13 @@ export default async function JoinByMembershipLinkPage({
   return (
     <AppShell>
       {isConvexConfigured ? (
-        <ConnectedAdminCalendarPainter membershipToken={membershipToken} />
+        <ConnectedMembershipAvailability membershipToken={membershipToken} />
       ) : (
         <RoutePlaceholder
           icon={KeyRound}
           eyebrow="Secret membership link"
-          title="Admin calendar setup"
-          description="Set NEXT_PUBLIC_CONVEX_URL to resolve the membership link and edit allowed meeting regions."
+          title="Participant availability"
+          description="Set NEXT_PUBLIC_CONVEX_URL to resolve the membership link and edit availability."
         />
       )}
     </AppShell>

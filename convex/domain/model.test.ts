@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_GRANULARITY_MINUTES,
   assertAvailabilityCellAlignment,
+  assertAvailabilityCellDuration,
   getMembershipCapabilities,
   makeAvailabilityCellKey,
   normalizeFinalizedSlot,
   normalizeEmailAddress,
   normalizeMeetingSettings,
   normalizeMeetingTitle,
+  normalizeParticipantDisplayName,
   slugifyMeetingTitle,
   transitionMeetingLifecycle,
 } from "./model";
@@ -218,6 +220,24 @@ describe("schema-adjacent helpers", () => {
     ).toThrow(/explicit timezone offset/u);
   });
 
+  it("requires persisted availability records to cover one grid cell", () => {
+    expect(() =>
+      assertAvailabilityCellDuration(
+        "2026-06-24T07:00:00.000Z",
+        "2026-06-24T07:30:00.000Z",
+        30,
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      assertAvailabilityCellDuration(
+        "2026-06-24T07:00:00.000Z",
+        "2026-06-24T08:00:00.000Z",
+        30,
+      ),
+    ).toThrow(/exactly one meeting grid cell/u);
+  });
+
   it("aligns availability cells to the meeting wall-clock timezone", () => {
     expect(() =>
       assertAvailabilityCellAlignment(
@@ -277,6 +297,13 @@ describe("schema-adjacent helpers", () => {
     expect(() => normalizeMeetingTitle("   ")).toThrow(/title is required/u);
     expect(() => normalizeMeetingTitle("A".repeat(161))).toThrow(
       /160 characters or fewer/u,
+    );
+    expect(normalizeParticipantDisplayName("  Ada Lovelace  ")).toBe("Ada Lovelace");
+    expect(() => normalizeParticipantDisplayName("   ")).toThrow(
+      /display name is required/u,
+    );
+    expect(() => normalizeParticipantDisplayName("A".repeat(121))).toThrow(
+      /120 characters or fewer/u,
     );
     expect(slugifyMeetingTitle("  Team Planning / Q3!  ")).toBe("team-planning-q3");
     expect(normalizeEmailAddress("  Ada@Example.COM ")).toBe("ada@example.com");

@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   assertAvailabilityCellAlignment,
+  assertAvailabilityCellDuration,
   assertCanAdminister,
   assertCanEditOpenMeeting,
   getMembershipCapabilities,
@@ -13,6 +14,7 @@ import {
   normalizeFinalizedSlot,
   normalizeMeetingSettings,
   normalizeMeetingTitle,
+  normalizeParticipantDisplayName,
   slugifyMeetingTitle,
   transitionMeetingLifecycle,
 } from "./domain/model";
@@ -166,6 +168,26 @@ export const readMeetingBySlug = query({
   },
 });
 
+export const readPublicMeetingBySlug = query({
+  args: {
+    slug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const meeting = await ctx.db
+      .query("meetings")
+      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.slug)))
+      .unique();
+    if (!meeting) {
+      return null;
+    }
+
+    return {
+      meeting: redactPublicMeeting(meeting),
+      capabilities: getMembershipCapabilities(meeting, null),
+    };
+  },
+});
+
 export const readMeetingByMembershipToken = query({
   args: {
     membershipToken: v.string(),
@@ -185,6 +207,35 @@ export const readMeetingByMembershipToken = query({
       meeting,
       membership: redactMembership(membership),
       capabilities: getMembershipCapabilities(meeting, membership),
+    };
+  },
+});
+
+export const readParticipantMeetingByMembershipToken = query({
+  args: {
+    membershipToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const membership = await findMembershipByToken(ctx, args.membershipToken);
+    if (!membership) {
+      return null;
+    }
+
+    const meeting = await ctx.db.get(membership.meetingId);
+    if (!meeting) {
+      return null;
+    }
+
+    const ownAvailabilityRecords = await ctx.db
+      .query("availabilityRecords")
+      .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
+      .collect();
+
+    return {
+      meeting: redactPublicMeeting(meeting),
+      membership: redactParticipantMembership(membership),
+      capabilities: getMembershipCapabilities(meeting, membership),
+      ownAvailabilityRecords,
     };
   },
 });
@@ -257,6 +308,85 @@ export const createMembership = mutation({
       membershipId,
       membershipToken: membershipToken.rawToken,
     };
+  },
+});
+
+export const createParticipantMembership = mutation({
+  args: {
+    meetingSlug: v.string(),
+    displayName: v.string(),
+    privacyMode: v.optional(privacyModeValidator),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const meeting = await ctx.db
+      .query("meetings")
+      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.meetingSlug)))
+      .unique();
+    if (!meeting) {
+      throw new Error("Meeting not found");
+    }
+
+    if (meeting.lifecycleState !== "open") {
+      throw new Error("Finalized meetings are read-only until reopened");
+    }
+
+    const displayName = normalizeParticipantDisplayName(args.displayName);
+    const membershipToken = await createSecretToken("membership");
+    const membershipId = await ctx.db.insert("memberships", {
+      meetingId: meeting._id,
+      displayName,
+      role: "member",
+      privacyMode: args.privacyMode ?? "detailed",
+      tokenHash: membershipToken.tokenHash,
+      tokenFingerprint: membershipToken.tokenFingerprint,
+      tokenVersion: 1,
+      tokenCreatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await insertAuditEvent(ctx, {
+      meetingId: meeting._id,
+      targetMembershipId: membershipId,
+      kind: "membership.created",
+      metadata: { role: "member" },
+      now,
+    });
+
+    return {
+      meetingId: meeting._id,
+      membershipId,
+      membershipToken: membershipToken.rawToken,
+    };
+  },
+});
+
+export const updateMembershipDisplayName = mutation({
+  args: {
+    membershipToken: v.string(),
+    displayName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    const displayName = normalizeParticipantDisplayName(args.displayName);
+
+    await ctx.db.patch(membership._id, {
+      displayName,
+      updatedAt: now,
+    });
+
+    await insertAuditEvent(ctx, {
+      meetingId: membership.meetingId,
+      actorMembershipId: membership._id,
+      targetMembershipId: membership._id,
+      kind: "membership.display_name_updated",
+      metadata: {},
+      now,
+    });
+
+    return { membershipId: membership._id, displayName };
   },
 });
 
@@ -474,12 +604,18 @@ export const upsertAvailabilityRecord = mutation({
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
     }
+    assertMembershipHasDisplayName(membership);
 
     assertAvailabilityCellAlignment(
       args.startUtc,
       args.endUtc,
       meeting.granularityMinutes,
-      args.timeZone ?? meeting.canonicalTimeZone,
+      meeting.canonicalTimeZone,
+    );
+    assertAvailabilityCellDuration(
+      args.startUtc,
+      args.endUtc,
+      meeting.granularityMinutes,
     );
     if (
       !isSlotInsideAllowedRanges(
@@ -504,7 +640,7 @@ export const upsertAvailabilityRecord = mutation({
       membershipId: membership._id,
       startUtc: normalizedStartUtc,
       endUtc: normalizedEndUtc,
-      timeZone: args.timeZone ?? meeting.canonicalTimeZone,
+      timeZone: meeting.canonicalTimeZone,
       cellKey,
       response: args.response,
       note: args.note?.trim(),
@@ -521,6 +657,46 @@ export const upsertAvailabilityRecord = mutation({
       createdAt: now,
     });
     return { availabilityRecordId };
+  },
+});
+
+export const saveAvailabilityRecords = mutation({
+  args: {
+    membershipToken: v.string(),
+    records: v.array(
+      v.object({
+        startUtc: v.string(),
+        endUtc: v.string(),
+        timeZone: v.optional(v.string()),
+        response: v.optional(availabilityResponseValidator),
+        note: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    const meeting = await requireMeeting(ctx, membership.meetingId);
+    if (meeting.lifecycleState !== "open") {
+      throw new Error("Finalized meetings are read-only until reopened");
+    }
+    assertMembershipHasDisplayName(membership);
+
+    const savedRecordIds: Id<"availabilityRecords">[] = [];
+    const clearedCellKeys: string[] = [];
+    for (const record of args.records) {
+      const result = await saveAvailabilityRecord(ctx, {
+        membershipId: membership._id,
+        meeting,
+        record,
+      });
+      if (result.kind === "saved") {
+        savedRecordIds.push(result.availabilityRecordId);
+      } else {
+        clearedCellKeys.push(result.cellKey);
+      }
+    }
+
+    return { savedRecordIds, clearedCellKeys };
   },
 });
 
@@ -771,6 +947,150 @@ async function insertAuditEvent(
     metadata: args.metadata,
     createdAt: args.now,
   });
+}
+
+async function saveAvailabilityRecord(
+  ctx: MutationLikeCtx,
+  args: {
+    membershipId: Id<"memberships">;
+    meeting: {
+      _id: Id<"meetings">;
+      canonicalTimeZone: string;
+      granularityMinutes: number;
+      allowedTimeRanges: {
+        startUtc: string;
+        endUtc: string;
+        timeZone: string;
+        label?: string;
+      }[];
+    };
+    record: {
+      startUtc: string;
+      endUtc: string;
+      timeZone?: string;
+      response?: "yes" | "reluctant" | "no";
+      note?: string;
+    };
+  },
+) {
+  assertAvailabilityCellAlignment(
+    args.record.startUtc,
+    args.record.endUtc,
+    args.meeting.granularityMinutes,
+    args.meeting.canonicalTimeZone,
+  );
+  assertAvailabilityCellDuration(
+    args.record.startUtc,
+    args.record.endUtc,
+    args.meeting.granularityMinutes,
+  );
+  if (
+    !isSlotInsideAllowedRanges(
+      { startUtc: args.record.startUtc, endUtc: args.record.endUtc },
+      args.meeting.allowedTimeRanges,
+    )
+  ) {
+    throw new Error("Availability cell must be inside an allowed time range");
+  }
+
+  const now = Date.now();
+  const cellKey = makeAvailabilityCellKey(args.record.startUtc, args.record.endUtc);
+  const [normalizedStartUtc, normalizedEndUtc] = cellKey.split("_") as [string, string];
+  const existingRecord = await ctx.db
+    .query("availabilityRecords")
+    .withIndex("by_membership_cell", (q) =>
+      q.eq("membershipId", args.membershipId).eq("cellKey", cellKey),
+    )
+    .unique();
+
+  if (!args.record.response) {
+    if (existingRecord) {
+      await ctx.db.delete(existingRecord._id);
+    }
+    return { kind: "cleared" as const, cellKey };
+  }
+
+  const recordFields = {
+    meetingId: args.meeting._id,
+    membershipId: args.membershipId,
+    startUtc: normalizedStartUtc,
+    endUtc: normalizedEndUtc,
+    timeZone: args.meeting.canonicalTimeZone,
+    cellKey,
+    response: args.record.response,
+    note: args.record.note?.trim(),
+    updatedAt: now,
+  };
+
+  if (existingRecord) {
+    await ctx.db.patch(existingRecord._id, recordFields);
+    return { kind: "saved" as const, availabilityRecordId: existingRecord._id };
+  }
+
+  const availabilityRecordId = await ctx.db.insert("availabilityRecords", {
+    ...recordFields,
+    createdAt: now,
+  });
+  return { kind: "saved" as const, availabilityRecordId };
+}
+
+function redactPublicMeeting(meeting: {
+  _id: Id<"meetings">;
+  title: string;
+  slug: string;
+  description?: string;
+  lifecycleState: "open" | "finalized";
+  lifecycleRevision: number;
+  adminMode: "roleBased" | "everyoneAdmin";
+  canonicalTimeZone: string;
+  granularityMinutes: number;
+  durationMinutes: number;
+  allowedTimeRanges: {
+    startUtc: string;
+    endUtc: string;
+    timeZone: string;
+    label?: string;
+  }[];
+  finalizedAt?: number;
+  finalizedSlot?: {
+    startUtc: string;
+    endUtc: string;
+    timeZone?: string;
+  };
+  createdAt: number;
+  updatedAt: number;
+}) {
+  return {
+    _id: meeting._id,
+    title: meeting.title,
+    slug: meeting.slug,
+    description: meeting.description,
+    lifecycleState: meeting.lifecycleState,
+    lifecycleRevision: meeting.lifecycleRevision,
+    adminMode: meeting.adminMode,
+    canonicalTimeZone: meeting.canonicalTimeZone,
+    granularityMinutes: meeting.granularityMinutes,
+    durationMinutes: meeting.durationMinutes,
+    allowedTimeRanges: meeting.allowedTimeRanges,
+    finalizedAt: meeting.finalizedAt,
+    finalizedSlot: meeting.finalizedSlot,
+    createdAt: meeting.createdAt,
+    updatedAt: meeting.updatedAt,
+  };
+}
+
+function redactParticipantMembership(membership: {
+  displayName?: string;
+  role: MembershipRole;
+}) {
+  return {
+    displayName: membership.displayName,
+    role: membership.role,
+  };
+}
+
+function assertMembershipHasDisplayName(membership: { displayName?: string }) {
+  normalizeParticipantDisplayName(membership.displayName ?? "");
 }
 
 function redactMembership(membership: {

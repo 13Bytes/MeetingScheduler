@@ -122,6 +122,17 @@ export function normalizeMeetingTitle(title: string): string {
   return normalized;
 }
 
+export function normalizeParticipantDisplayName(displayName: string): string {
+  const normalized = displayName.trim();
+  if (!normalized) {
+    throw new Error("Participant display name is required");
+  }
+  if (normalized.length > 120) {
+    throw new Error("Participant display name must be 120 characters or fewer");
+  }
+  return normalized;
+}
+
 export function normalizeAllowedTimeRange(
   input: AllowedTimeRangeInput,
   canonicalTimeZone: string,
@@ -239,6 +250,20 @@ export function assertAvailabilityCellAlignment(
     !isOnLocalGridBoundary(endParts, granularityMinutes)
   ) {
     throw new Error("Availability cell boundaries must align to the meeting grid");
+  }
+}
+
+export function assertAvailabilityCellDuration(
+  startUtc: string,
+  endUtc: string,
+  granularityMinutes: number,
+): void {
+  const normalizedStartUtc = normalizeIsoInstant("startUtc", startUtc);
+  const normalizedEndUtc = normalizeIsoInstant("endUtc", endUtc);
+  const durationMs = Date.parse(normalizedEndUtc) - Date.parse(normalizedStartUtc);
+
+  if (durationMs !== granularityMinutes * 60 * 1000) {
+    throw new Error("Availability records must cover exactly one meeting grid cell");
   }
 }
 

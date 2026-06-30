@@ -48,10 +48,12 @@ export const routeMap = [
   },
   {
     path: "/m/[meetingSlug]",
-    purpose: "Future public meeting poll and availability collaboration route.",
+    purpose:
+      "Public meeting poll route for joining and painting participant availability.",
   },
   {
     path: "/join/[membershipToken]",
-    purpose: "Secret membership link route for admin setup and later member tools.",
+    purpose:
+      "Secret membership route for returning to a response and admin setup access.",
   },
 ] as const;

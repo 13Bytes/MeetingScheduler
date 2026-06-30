@@ -37,9 +37,15 @@ collaboration, and later AI-agent-friendly APIs.
    - Persist allowed ranges through the existing Convex settings/domain layer.
    - Keep participant availability painting, recommendations, and finalization
      UI for later stages.
-5. **Stage 4: Availability Collaboration**
-   - Add realtime availability painting and participant state inside the
+5. **Stage 4: Participant Availability Painter**
+   - Replace the public poll placeholder with participant join and response
+     editing.
+   - Let participants paint `yes`, `reluctant`, `no`, and clear/unset over
      admin-allowed cells.
+   - Persist responses through Stage 1 availability records and personal
+     membership links.
+   - Keep recommendations, passwordless email identity, notification delivery,
+     and finalization UI for later stages.
 6. **Stage 5: Finalization and Notifications**
    - Add organizer finalization and email notifications.
 7. **Stage 6: Agent-Friendly APIs**
