@@ -46,7 +46,16 @@ collaboration, and later AI-agent-friendly APIs.
      membership links.
    - Keep recommendations, passwordless email identity, notification delivery,
      and finalization UI for later stages.
-6. **Stage 5: Finalization and Notifications**
+6. **Stage 5: Realtime Results and Recommendations**
+   - Generate candidate slots from admin-allowed cell ranges using meeting
+     duration and granularity.
+   - Score candidates across every covered cell, ranking by able participants,
+     fewer reluctant votes, then earliest start.
+   - Show realtime public/member results with privacy-aware aggregate or
+     detailed display.
+   - Keep finalization, passwordless email identity, notification delivery, and
+     agent APIs for later stages.
+7. **Stage 6: Finalization and Notifications**
    - Add organizer finalization and email notifications.
-7. **Stage 6: Agent-Friendly APIs**
+8. **Stage 7: Agent-Friendly APIs**
    - Expose safe API surfaces for external assistants and automations.

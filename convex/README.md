@@ -61,6 +61,25 @@ Participant availability saves use the same lifecycle and membership checks.
 Clearing a cell deletes that member's availability record for the cell; it does
 not create a fourth persisted response value.
 
+## Results and Privacy
+
+Stage 5 result queries derive recommendations from existing meeting,
+membership, and availability data. Candidate slots are generated from
+admin-allowed cells using the meeting duration and granularity. A membership is
+available for a candidate only if every covered cell is saved as `yes` or
+`reluctant`; `no` and missing records both count as unavailable.
+
+Ranking maximizes able participants first, minimizes reluctant covered-cell
+votes second, and uses earliest start time as the deterministic tie-breaker.
+Results are not persisted yet; Convex reads compute them from current records so
+subscribed clients update as availability changes.
+
+Detailed result payloads include participant display names and per-candidate
+response details only when allowed. Admin-capable memberships can read details.
+Non-admin memberships get details only when they are active, detailed-mode
+members and every active participant is also detailed-mode. Public reads and
+summary-only situations return aggregate scores only.
+
 ## Timezones and Cells
 
 Meeting settings require a canonical IANA timezone. Allowed ranges and
