@@ -1,9 +1,10 @@
 # Meeting Scheduler
 
-A Stage 3 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 4 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
 backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
-meeting creation flow, and an admin calendar constraint painter.
+meeting creation flow, an admin calendar constraint painter, and participant
+availability painting.
 
 ## Stack
 
@@ -17,8 +18,9 @@ meeting creation flow, and an admin calendar constraint painter.
 
 Stage 1 defines the backend/domain foundation. Stage 2 adds the first
 user-facing creation flow. Stage 3 adds the admin setup/editing experience for
-painting broad allowed candidate time regions while keeping participant
-availability and recommendation workflows for later stages.
+painting broad allowed candidate time regions. Stage 4 adds the participant
+join/return flow for painting yes, reluctant, no, or unset availability over
+admin-allowed cells.
 
 Core Convex tables:
 
@@ -59,8 +61,8 @@ Key invariants:
 | ------------------------- | ------------------------------------------ |
 | `/`                       | Foundation overview and route entry points |
 | `/new`                    | Anonymous meeting creation flow            |
-| `/m/[meetingSlug]`        | Future public meeting poll                 |
-| `/join/[membershipToken]` | Secret membership link and admin setup     |
+| `/m/[meetingSlug]`        | Public participant join and response flow  |
+| `/join/[membershipToken]` | Secret member return link and admin setup  |
 
 ## Meeting Creation Flow
 
@@ -115,6 +117,34 @@ meeting duration, while the Convex domain normalization remains authoritative.
 
 Non-admin memberships can view the constraints but cannot edit them. Finalized
 meetings are read-only until reopened by the backend lifecycle flow.
+
+## Participant Availability Painter
+
+`/m/[meetingSlug]` loads public meeting details and the admin-allowed calendar
+cells. A visitor can paint locally first, but must enter a display name before
+the first persisted availability write. Saving creates a regular member
+membership through the Stage 1 token model, writes that participant's cell-level
+availability records, and displays a copyable personal `/join/[membershipToken]`
+link for returning later.
+
+`/join/[membershipToken]` resolves a secret membership link and shows only that
+participant's own saved response for editing. Admin memberships land on the same
+response editor first and can open the Stage 3 admin setup painter from an admin
+access panel. Admin remains a membership role; there is still no separate admin
+token model.
+
+The participant grid is derived from the meeting's canonical timezone,
+granularity, duration, and admin-allowed ranges. Only admin-allowed cells are
+paintable. Brush modes are `yes`, `reluctant`, `no`, and clear/unset, with drag
+painting and keyboard cell toggles. Convex validation remains authoritative:
+saves require an active membership, an open meeting, grid-aligned cell
+boundaries, and cells inside the allowed ranges. Finalized polls are read-only
+until reopened.
+
+Stage 4 intentionally keeps results modest. The UI shows the participant's own
+response and public meeting details, while recommendation ranking, candidate
+slot scoring, organizer finalization UI, passwordless email identity, and email
+notification delivery remain deferred.
 
 ## Environment
 
@@ -190,8 +220,8 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 3 intentionally does not implement participant availability painting,
-recommendation ranking, passwordless email identity UI, notification delivery,
-cookie-backed anonymous recovery, finalization UI, or AI-agent APIs. The creation
-and admin-editing flows are link-based for now: the creator must keep their
-personal admin membership URL.
+Stage 4 intentionally does not implement recommendation ranking, passwordless
+email identity UI, notification delivery, cookie-backed anonymous recovery,
+finalization UI, or AI-agent APIs. The creation, admin-editing, and participant
+return flows are link-based for now: each person must keep their personal
+membership URL.

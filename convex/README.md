@@ -13,7 +13,7 @@ tokens, availability records, notifications, and audit events.
 - `allowedTimeRanges` stores timezone-aware windows that later admin calendar
   painting can refine.
 - `availabilityRecords` stores cell-level `yes`, `reluctant`, or `no` responses
-  by membership. Later UI stages will write these records.
+  by membership. Stage 4 participant painting writes and clears these records.
 - `emailIdentities` stores optional normalized email identities for
   passwordless recovery.
 - `magicLinks` stores verification and recovery tokens by hash with expiry and
@@ -37,6 +37,11 @@ Lookup hashes the presented token and queries `by_token_hash`. Raw tokens should
 not be logged, persisted, emailed via the outbox payload, or copied into audit
 metadata.
 
+Stage 4 displays a raw membership token only as part of the current user's own
+personal `/join/[membershipToken]` link after joining or when they are already
+using that link. Public meeting reads and membership-token reads never return raw
+tokens from Convex.
+
 ## Lifecycle and Permissions
 
 Meetings have two persisted states: `open` and `finalized`. Reopening a meeting
@@ -51,6 +56,10 @@ Permission helpers in `convex/domain/model.ts` enforce:
 - Revoked memberships have no capabilities.
 - Any active member can edit availability while the meeting is open.
 - Finalized meetings are read-only until an active admin reopens them.
+
+Participant availability saves use the same lifecycle and membership checks.
+Clearing a cell deletes that member's availability record for the cell; it does
+not create a fourth persisted response value.
 
 ## Timezones and Cells
 
