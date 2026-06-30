@@ -259,6 +259,7 @@ export function ParticipantAvailabilityPainter({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasLocalEdits, setHasLocalEdits] = useState(false);
 
   const membershipToken = existingMembershipToken ?? createdMembershipToken;
   const canEdit =
@@ -290,6 +291,7 @@ export function ParticipantAvailabilityPainter({
     [data.ownAvailabilityRecords, grid.participantCellKeys],
   );
   const savedResponsesRef = useRef(initialResponses);
+  const pendingSavedResponsesRef = useRef<Map<string, AvailabilityResponse> | null>(null);
   const [paintState, dispatch] = useReducer(
     availabilityPaintReducer,
     initialResponses,
@@ -301,9 +303,19 @@ export function ParticipantAvailabilityPainter({
   );
 
   useEffect(() => {
+    if (hasLocalEdits) {
+      return;
+    }
+    if (
+      pendingSavedResponsesRef.current &&
+      !areResponseMapsEqual(initialResponses, pendingSavedResponsesRef.current)
+    ) {
+      return;
+    }
+    pendingSavedResponsesRef.current = null;
     dispatch({ type: "replace", responsesByCellKey: initialResponses });
     savedResponsesRef.current = initialResponses;
-  }, [initialResponses]);
+  }, [hasLocalEdits, initialResponses]);
 
   const personalMembershipUrl = useMemo(() => {
     if (!membershipToken || typeof window === "undefined") {
@@ -326,6 +338,7 @@ export function ParticipantAvailabilityPainter({
     }
 
     let activeToken = membershipToken;
+    const wasNewJoin = !activeToken;
     const normalizedDisplayName = displayName.trim();
     const existingMembershipNeedsName = Boolean(
       data.membership && !data.membership.displayName,
@@ -364,10 +377,17 @@ export function ParticipantAvailabilityPainter({
       }
       if (records.length > 0) {
         await onSaveAvailability(activeToken, records);
-        savedResponsesRef.current = new Map(paintState.responsesByCellKey);
+        const savedResponses = new Map(paintState.responsesByCellKey);
+        savedResponsesRef.current = savedResponses;
+        pendingSavedResponsesRef.current = savedResponses;
+        setHasLocalEdits(false);
         setNotice("Availability saved.");
+      } else if (wasNewJoin) {
+        setNotice("Joined meeting.");
+      } else if (existingMembershipNeedsName) {
+        setNotice("Display name saved.");
       } else {
-        setNotice(activeToken ? "No availability changes to save." : "Joined meeting.");
+        setNotice("No availability changes to save.");
       }
     } catch (caughtError) {
       setError(
@@ -399,6 +419,7 @@ export function ParticipantAvailabilityPainter({
     }
     setError(null);
     setNotice(null);
+    setHasLocalEdits(true);
     dispatch({ type: "apply", cellKeys: grid.participantCellKeys, mode: response });
   }
 
@@ -466,10 +487,12 @@ export function ParticipantAvailabilityPainter({
               }}
               onHover={(cellKey) => dispatch({ type: "hover", cellKey, grid })}
               onCommit={() => dispatch({ type: "commit" })}
+              onCommittedEdit={() => setHasLocalEdits(true)}
               onCancel={() => dispatch({ type: "cancel" })}
               onApplyCell={(cellKey) => {
                 setError(null);
                 setNotice(null);
+                setHasLocalEdits(true);
                 dispatch({ type: "apply", cellKeys: [cellKey], mode });
               }}
             />
@@ -599,6 +622,7 @@ function AvailabilityGrid({
   onBegin,
   onHover,
   onCommit,
+  onCommittedEdit,
   onCancel,
   onApplyCell,
 }: {
@@ -610,6 +634,7 @@ function AvailabilityGrid({
   onBegin: (cellKey: string) => void;
   onHover: (cellKey: string) => void;
   onCommit: () => void;
+  onCommittedEdit: () => void;
   onCancel: () => void;
   onApplyCell: (cellKey: string) => void;
 }) {
@@ -678,6 +703,7 @@ function AvailabilityGrid({
             onBegin={onBegin}
             onHover={onHover}
             onCommit={onCommit}
+            onCommittedEdit={onCommittedEdit}
             onApplyCell={onApplyCell}
           />
         ))}
@@ -697,6 +723,7 @@ function AvailabilityRow({
   onBegin,
   onHover,
   onCommit,
+  onCommittedEdit,
   onApplyCell,
 }: {
   grid: ParticipantAvailabilityGrid;
@@ -709,6 +736,7 @@ function AvailabilityRow({
   onBegin: (cellKey: string) => void;
   onHover: (cellKey: string) => void;
   onCommit: () => void;
+  onCommittedEdit: () => void;
   onApplyCell: (cellKey: string) => void;
 }) {
   return (
@@ -739,6 +767,7 @@ function AvailabilityRow({
             onBegin={onBegin}
             onHover={onHover}
             onCommit={onCommit}
+            onCommittedEdit={onCommittedEdit}
             onApplyCell={onApplyCell}
           />
         );
@@ -756,6 +785,7 @@ function AvailabilityCellButton({
   onBegin,
   onHover,
   onCommit,
+  onCommittedEdit,
   onApplyCell,
 }: {
   cell: { key: string; dayLabel: string; timeLabel: string; isWeekend: boolean };
@@ -766,6 +796,7 @@ function AvailabilityCellButton({
   onBegin: (cellKey: string) => void;
   onHover: (cellKey: string) => void;
   onCommit: () => void;
+  onCommittedEdit: () => void;
   onApplyCell: (cellKey: string) => void;
 }) {
   const displayedResponse = isPreview && mode !== "clear" ? mode : response;
@@ -797,6 +828,7 @@ function AvailabilityCellButton({
       }}
       onPointerUp={() => {
         if (!disabled) {
+          onCommittedEdit();
           onCommit();
         }
       }}
@@ -926,6 +958,21 @@ function responseClassName(response?: AvailabilityResponse) {
     return "bg-rose-400 hover:bg-rose-500";
   }
   return "bg-surface hover:bg-blue-50";
+}
+
+function areResponseMapsEqual(
+  left: Map<string, AvailabilityResponse>,
+  right: Map<string, AvailabilityResponse>,
+) {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const [cellKey, response] of left) {
+    if (right.get(cellKey) !== response) {
+      return false;
+    }
+  }
+  return true;
 }
 
 const inputClassName =

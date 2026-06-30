@@ -86,6 +86,75 @@ describe("ParticipantAvailabilityPainter", () => {
     ).toContain("/join/member-secret-token");
   });
 
+  it("shows a joined notice when saving a public membership without painted cells", async () => {
+    const onCreateMembership = vi
+      .fn()
+      .mockResolvedValue({ membershipToken: "member-secret-token" });
+    const onSaveAvailability = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ParticipantAvailabilityPainter
+        data={baseData}
+        onCreateMembership={onCreateMembership}
+        onSaveAvailability={onSaveAvailability}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/display name/i), {
+      target: { value: "Ada Lovelace" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /join and save/i }));
+
+    expect(await screen.findByText(/joined meeting/i)).toBeInTheDocument();
+    expect(onSaveAvailability).not.toHaveBeenCalled();
+  });
+
+  it("does not clobber unsaved paint edits when membership data refreshes", () => {
+    const { rerender } = render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("gridcell", { name: /thu jun 25 09:00 unset/i }), {
+      key: "Enter",
+    });
+    expect(
+      screen.getByRole("gridcell", { name: /thu jun 25 09:00 yes/i }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          ownAvailabilityRecords: [
+            {
+              cellKey: "2026-06-25T07:30:00.000Z_2026-06-25T08:00:00.000Z",
+              startUtc: "2026-06-25T07:30:00.000Z",
+              endUtc: "2026-06-25T08:00:00.000Z",
+              timeZone: "Europe/Berlin",
+              response: "no",
+            },
+          ],
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    expect(
+      screen.getByRole("gridcell", { name: /thu jun 25 09:00 yes/i }),
+    ).toBeInTheDocument();
+  });
+
   it("lets returning members clear their own persisted response", async () => {
     const onSaveAvailability = vi.fn().mockResolvedValue(undefined);
     const cellKey = "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z";

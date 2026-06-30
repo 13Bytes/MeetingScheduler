@@ -683,7 +683,8 @@ export const saveAvailabilityRecords = mutation({
 
     const savedRecordIds: Id<"availabilityRecords">[] = [];
     const clearedCellKeys: string[] = [];
-    for (const record of args.records) {
+    const uniqueRecords = dedupeAvailabilityRecordBatch(args.records);
+    for (const record of uniqueRecords) {
       const result = await saveAvailabilityRecord(ctx, {
         membershipId: membership._id,
         meeting,
@@ -1032,6 +1033,23 @@ async function saveAvailabilityRecord(
     createdAt: now,
   });
   return { kind: "saved" as const, availabilityRecordId };
+}
+
+function dedupeAvailabilityRecordBatch<
+  T extends {
+    startUtc: string;
+    endUtc: string;
+  },
+>(records: T[]) {
+  const seenCellKeys = new Set<string>();
+  for (const record of records) {
+    const cellKey = makeAvailabilityCellKey(record.startUtc, record.endUtc);
+    if (seenCellKeys.has(cellKey)) {
+      throw new Error("Availability batch contains duplicate cells");
+    }
+    seenCellKeys.add(cellKey);
+  }
+  return records;
 }
 
 function redactPublicMeeting(meeting: {
