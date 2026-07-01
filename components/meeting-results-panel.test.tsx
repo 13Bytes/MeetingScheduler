@@ -161,6 +161,56 @@ describe("MeetingResultsPanel", () => {
     );
   });
 
+  it("normalizes stale override selections after candidate refreshes", async () => {
+    const overrideCandidate: ScoredCandidateSlot = {
+      ...candidateFixture,
+      startUtc: "2026-06-25T08:00:00.000Z",
+      endUtc: "2026-06-25T09:00:00.000Z",
+      rank: 2,
+      availableParticipantCount: 1,
+      unavailableParticipantCount: 1,
+      scorePercent: 50,
+    };
+    const onFinalize = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidateCount: 2,
+          candidates: [candidateFixture, overrideCandidate],
+          shortlist: [candidateFixture],
+        }}
+        canAdminister
+        canFinalize
+        onFinalize={onFinalize}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/override final slot/i), {
+      target: { value: "2026-06-25T08:00:00.000Z_2026-06-25T09:00:00.000Z" },
+    });
+    rerender(
+      <MeetingResultsPanel
+        results={detailedResults}
+        canAdminister
+        canFinalize
+        onFinalize={onFinalize}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /finalize selected time/i }));
+
+    expect(screen.getByLabelText<HTMLSelectElement>(/override final slot/i).value).toBe(
+      "2026-06-25T07:00:00.000Z_2026-06-25T08:00:00.000Z",
+    );
+    await waitFor(() =>
+      expect(onFinalize).toHaveBeenCalledWith({
+        startUtc: "2026-06-25T07:00:00.000Z",
+        endUtc: "2026-06-25T08:00:00.000Z",
+        timeZone: "Europe/Berlin",
+      }),
+    );
+  });
+
   it("shows the final selected slot and exposes reopen for admins", async () => {
     const onReopen = vi.fn().mockResolvedValue(undefined);
     render(

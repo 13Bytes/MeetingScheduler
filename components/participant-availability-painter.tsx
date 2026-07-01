@@ -324,6 +324,14 @@ export function ParticipantAvailabilityPainter({
     () => summarizeAvailability(grid, paintState.responsesByCellKey),
     [grid, paintState.responsesByCellKey],
   );
+  const canFinalizeMeeting = Boolean(
+    membershipToken && data.capabilities.canFinalize && meeting.lifecycleState === "open",
+  );
+  const canReopenMeeting = Boolean(
+    membershipToken &&
+    data.capabilities.canReopen &&
+    meeting.lifecycleState === "finalized",
+  );
 
   useEffect(() => {
     if (hasLocalEdits) {
@@ -487,23 +495,15 @@ export function ParticipantAvailabilityPainter({
           canAdminister={data.capabilities.canAdminister}
           lifecycleState={meeting.lifecycleState}
           selectedSlot={meeting.finalizedSlot}
-          canFinalize={Boolean(
-            membershipToken &&
-            data.capabilities.canFinalize &&
-            meeting.lifecycleState === "open",
-          )}
-          canReopen={Boolean(
-            membershipToken &&
-            data.capabilities.canReopen &&
-            meeting.lifecycleState === "finalized",
-          )}
+          canFinalize={canFinalizeMeeting}
+          canReopen={canReopenMeeting}
           onFinalize={
-            onFinalizeMeeting && membershipToken
+            canFinalizeMeeting && onFinalizeMeeting && membershipToken
               ? (finalizedSlot) => onFinalizeMeeting(membershipToken, finalizedSlot)
               : undefined
           }
           onReopen={
-            onReopenMeeting && membershipToken
+            canReopenMeeting && onReopenMeeting && membershipToken
               ? () => onReopenMeeting(membershipToken)
               : undefined
           }

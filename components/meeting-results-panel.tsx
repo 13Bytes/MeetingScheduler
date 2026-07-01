@@ -51,12 +51,13 @@ export function MeetingResultsPanel({
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const defaultCandidate = results.shortlist[0] ?? results.candidates[0];
-  const activeCandidateKey =
-    selectedCandidateKey ?? (defaultCandidate ? candidateKey(defaultCandidate) : null);
   const selectedCandidate =
-    results.candidates.find(
-      (candidate) => candidateKey(candidate) === activeCandidateKey,
-    ) ?? defaultCandidate;
+    (selectedCandidateKey
+      ? results.candidates.find(
+          (candidate) => candidateKey(candidate) === selectedCandidateKey,
+        )
+      : undefined) ?? defaultCandidate;
+  const activeCandidateKey = selectedCandidate ? candidateKey(selectedCandidate) : null;
 
   async function handleFinalize() {
     if (!selectedCandidate || !onFinalize) {
