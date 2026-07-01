@@ -66,7 +66,7 @@ type MeetingSummary = {
 type MembershipSummary = {
   role: "admin" | "member";
   displayName?: string;
-  emailIdentityId?: string;
+  hasEmailIdentity?: boolean;
 };
 
 type MembershipCapabilities = {
@@ -664,7 +664,7 @@ export function ParticipantAvailabilityPainter({
 
           <MembershipIdentityPanel
             membershipToken={membershipToken ?? undefined}
-            attachedEmailIdentityId={data.membership?.emailIdentityId}
+            isEmailRecoveryAttached={data.membership?.hasEmailIdentity}
           />
         </aside>
       </div>

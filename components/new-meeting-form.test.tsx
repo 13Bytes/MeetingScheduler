@@ -21,6 +21,7 @@ describe("NewMeetingForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
 
     await waitFor(() => expect(createMeeting).toHaveBeenCalledTimes(1));
+    expect(createMeeting.mock.calls[0]?.[0]).not.toHaveProperty("creatorEmail");
     expect(createMeeting).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Team planning",
@@ -40,6 +41,30 @@ describe("NewMeetingForm", () => {
     expect(
       screen.getByDisplayValue("http://localhost:3000/m/team-planning"),
     ).toBeInTheDocument();
+  });
+
+  it("submits a trimmed optional recovery email", async () => {
+    const createMeeting = vi.fn().mockResolvedValue({
+      slug: "team-planning",
+      adminMembershipToken: "admin-secret",
+    });
+
+    render(<NewMeetingForm createMeeting={createMeeting} />);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Team planning" },
+    });
+    fireEvent.change(screen.getByLabelText(/recovery email/i), {
+      target: { value: "  Ada@Example.COM  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
+
+    await waitFor(() => expect(createMeeting).toHaveBeenCalledTimes(1));
+    expect(createMeeting).toHaveBeenCalledWith(
+      expect.objectContaining({
+        creatorEmail: "Ada@Example.COM",
+      }),
+    );
   });
 
   it("keeps submission client-side when duration does not align to granularity", () => {

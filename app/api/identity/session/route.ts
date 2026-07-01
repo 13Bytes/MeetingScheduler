@@ -1,4 +1,8 @@
+import { ConvexHttpClient } from "convex/browser";
 import { NextRequest, NextResponse } from "next/server";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { getConvexUrl, getInternalIdentitySecret } from "@/lib/identity-internal";
 import {
   getIdentitySessionSecret,
   identitySessionCookieName,
@@ -11,14 +15,24 @@ export async function GET(request: NextRequest) {
     getIdentitySessionSecret(),
   );
 
-  return NextResponse.json(
-    session
-      ? {
-          signedIn: true,
-          emailIdentityId: session.emailIdentityId,
-          normalizedEmail: session.normalizedEmail,
-          expiresAt: session.expiresAt,
-        }
-      : { signedIn: false },
-  );
+  if (!session) {
+    return NextResponse.json({ signedIn: false });
+  }
+
+  try {
+    const convex = new ConvexHttpClient(getConvexUrl());
+    const identity = await convex.query(api.meetings.readVerifiedEmailIdentity, {
+      internalSecret: getInternalIdentitySecret(),
+      emailIdentityId: session.emailIdentityId as Id<"emailIdentities">,
+    });
+
+    return NextResponse.json({
+      signedIn: true,
+      emailIdentityId: identity.emailIdentityId,
+      normalizedEmail: identity.normalizedEmail,
+      expiresAt: session.expiresAt,
+    });
+  } catch {
+    return NextResponse.json({ signedIn: false });
+  }
 }

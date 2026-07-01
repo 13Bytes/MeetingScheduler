@@ -58,17 +58,13 @@ export default async function IdentityDashboardPage({
     );
   }
 
-  let dashboard: Awaited<ReturnType<typeof loadIdentityDashboard>> | { error: string } = {
-    error: "",
-  };
+  let dashboard: Awaited<ReturnType<typeof loadIdentityDashboard>> | { error: string };
   try {
     dashboard = await loadIdentityDashboard(session.emailIdentityId);
   } catch (caughtError) {
+    console.error("Unable to load identity dashboard", caughtError);
     dashboard = {
-      error:
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to load the recovery dashboard.",
+      error: "Unable to load the recovery dashboard.",
     };
   }
 
@@ -79,10 +75,16 @@ export default async function IdentityDashboardPage({
         <h1 className="text-3xl font-semibold tracking-normal text-foreground">
           Recovery dashboard
         </h1>
-        <p className="max-w-3xl text-sm leading-6 text-slate-600">
-          Signed in as {session.normalizedEmail}. Only memberships already attached to
-          this verified email appear here.
-        </p>
+        {"error" in dashboard ? (
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            Only memberships attached to your verified email appear here.
+          </p>
+        ) : (
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            Signed in as {dashboard.identity.normalizedEmail}. Only memberships already
+            attached to this verified email appear here.
+          </p>
+        )}
       </section>
 
       {"error" in dashboard ? (

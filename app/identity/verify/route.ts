@@ -24,7 +24,6 @@ export async function GET(request: NextRequest) {
     const sessionToken = createEmailIdentitySession(
       {
         emailIdentityId: result.emailIdentityId,
-        normalizedEmail: result.normalizedEmail,
       },
       getIdentitySessionSecret(),
     );

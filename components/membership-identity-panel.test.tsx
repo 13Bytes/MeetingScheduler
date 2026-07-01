@@ -71,10 +71,7 @@ describe("MembershipIdentityPanel", () => {
     ).toBeInTheDocument();
 
     rerender(
-      <MembershipIdentityPanel
-        membershipToken="member-secret"
-        attachedEmailIdentityId="email-1"
-      />,
+      <MembershipIdentityPanel membershipToken="member-secret" isEmailRecoveryAttached />,
     );
 
     expect(

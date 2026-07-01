@@ -16,10 +16,10 @@ type IdentitySessionState =
 
 export function MembershipIdentityPanel({
   membershipToken,
-  attachedEmailIdentityId,
+  isEmailRecoveryAttached,
 }: {
   membershipToken?: string;
-  attachedEmailIdentityId?: string;
+  isEmailRecoveryAttached?: boolean;
 }) {
   const [session, setSession] = useState<IdentitySessionState | null>(null);
   const [email, setEmail] = useState("");
@@ -28,7 +28,7 @@ export function MembershipIdentityPanel({
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [justAttached, setJustAttached] = useState(false);
-  const isAttached = Boolean(attachedEmailIdentityId) || justAttached;
+  const isAttached = Boolean(isEmailRecoveryAttached) || justAttached;
 
   useEffect(() => {
     let isMounted = true;

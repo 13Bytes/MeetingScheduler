@@ -238,10 +238,14 @@ export function NewMeetingForm({
               <input
                 className={inputClassName}
                 type="email"
+                autoComplete="email"
                 value={creatorEmail}
                 onChange={(event) => setCreatorEmail(event.target.value)}
                 placeholder="ada@example.com"
               />
+              <span className="text-xs leading-5 text-slate-500">
+                Used only to help recover your admin membership if you lose the link.
+              </span>
             </label>
             <label className="grid gap-2">
               <span className="text-sm font-medium text-foreground">Timezone</span>

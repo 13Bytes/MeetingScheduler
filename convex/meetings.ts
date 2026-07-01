@@ -49,6 +49,7 @@ import {
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
 const DEV_INTERNAL_IDENTITY_SECRET =
   "dev-only-meeting-scheduler-identity-internal-secret";
+const EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS = 5 * 60 * 1000;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -602,6 +603,9 @@ export const createMagicLink = mutation({
       emailIdentityId,
       membershipId: args.membershipId,
     });
+    if (args.purpose === "emailVerification") {
+      await assertEmailVerificationRequestAllowed(ctx, emailIdentityId, now);
+    }
     const magicLinkToken = await createSecretToken("magicLink");
     const magicLinkId = await ctx.db.insert("magicLinks", {
       purpose: args.purpose,
@@ -1007,6 +1011,24 @@ export const listIdentityDashboard = query({
   },
 });
 
+export const readVerifiedEmailIdentity = query({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const identity = await ctx.db.get(args.emailIdentityId);
+    assertVerifiedEmailIdentity(identity);
+
+    return {
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+      verifiedAt: identity.verifiedAt,
+    };
+  },
+});
+
 export const createRecoveredMembershipLink = mutation({
   args: {
     internalSecret: v.string(),
@@ -1269,6 +1291,24 @@ async function validateMagicLinkTarget(
   };
 }
 
+async function assertEmailVerificationRequestAllowed(
+  ctx: MutationLikeCtx,
+  emailIdentityId: Id<"emailIdentities">,
+  now: number,
+) {
+  const recentLinks = await ctx.db
+    .query("magicLinks")
+    .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", emailIdentityId))
+    .collect();
+  const cooldownStartedAt = now - EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS;
+  const hasRecentVerificationRequest = recentLinks.some(
+    (link) => link.purpose === "emailVerification" && link.createdAt > cooldownStartedAt,
+  );
+  if (hasRecentVerificationRequest) {
+    throw new Error("Please wait before requesting another verification link");
+  }
+}
+
 async function createEmailVerificationMagicLink(
   ctx: MutationLikeCtx,
   args: {
@@ -1284,6 +1324,7 @@ async function createEmailVerificationMagicLink(
     args.displayName,
     now,
   );
+  await assertEmailVerificationRequestAllowed(ctx, emailIdentityId, now);
   const magicLinkToken = await createSecretToken("magicLink");
   const magicLinkId = await ctx.db.insert("magicLinks", {
     purpose: "emailVerification",
@@ -1631,7 +1672,7 @@ function redactParticipantMembership(membership: {
   role: MembershipRole;
 }) {
   return {
-    emailIdentityId: membership.emailIdentityId,
+    hasEmailIdentity: Boolean(membership.emailIdentityId),
     displayName: membership.displayName,
     role: membership.role,
   };

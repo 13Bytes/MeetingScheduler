@@ -5,7 +5,6 @@ export const identitySessionMaxAgeSeconds = 30 * 24 * 60 * 60;
 
 export type EmailIdentitySession = {
   emailIdentityId: string;
-  normalizedEmail: string;
   issuedAt: number;
   expiresAt: number;
 };
@@ -23,7 +22,6 @@ export function createEmailIdentitySession(
     issuedAt + (input.maxAgeSeconds ?? identitySessionMaxAgeSeconds) * 1000;
   const payload: EmailIdentitySession = {
     emailIdentityId: input.emailIdentityId,
-    normalizedEmail: input.normalizedEmail,
     issuedAt,
     expiresAt,
   };
@@ -53,7 +51,6 @@ export function verifyEmailIdentitySession(
     const parsed = JSON.parse(base64UrlDecode(encodedPayload)) as EmailIdentitySession;
     if (
       !parsed.emailIdentityId ||
-      !parsed.normalizedEmail ||
       !Number.isFinite(parsed.issuedAt) ||
       !Number.isFinite(parsed.expiresAt) ||
       parsed.expiresAt <= now

@@ -15,7 +15,6 @@ describe("identity session cookies", () => {
     const token = createEmailIdentitySession(
       {
         emailIdentityId: "email-123",
-        normalizedEmail: "ada@example.com",
         now: 10_000,
         maxAgeSeconds: 60,
       },
@@ -24,7 +23,6 @@ describe("identity session cookies", () => {
 
     expect(verifyEmailIdentitySession(token, secret, 10_500)).toMatchObject({
       emailIdentityId: "email-123",
-      normalizedEmail: "ada@example.com",
       issuedAt: 10_000,
       expiresAt: 70_000,
     });
@@ -34,7 +32,6 @@ describe("identity session cookies", () => {
     const token = createEmailIdentitySession(
       {
         emailIdentityId: "email-123",
-        normalizedEmail: "ada@example.com",
         now: 10_000,
         maxAgeSeconds: 1,
       },
