@@ -39,6 +39,8 @@ describe("routes", () => {
     expect(routeMap.map((route) => route.path)).toEqual([
       "/",
       "/new",
+      "/identity",
+      "/identity/dashboard",
       "/m/[meetingSlug]",
       "/join/[membershipToken]",
     ]);

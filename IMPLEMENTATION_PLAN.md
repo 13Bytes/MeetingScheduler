@@ -62,5 +62,14 @@ collaboration, and later AI-agent-friendly APIs.
    - Make finalized polls read-only until an admin reopens them.
    - Queue notification placeholders only; keep real email delivery,
      passwordless identity UI, and agent APIs for later stages.
-8. **Stage 7: Agent-Friendly APIs**
+8. **Stage 7: Passwordless Email Identity**
+   - Add optional passwordless email verification using hashed, expiring,
+     consume-once magic links.
+   - Keep accounts optional and preserve anonymous creation plus secret
+     membership links.
+   - Attach verified email identities to memberships for recovery.
+   - Add a verified email dashboard for attached admin/response memberships and
+     one-time-displayed recovered membership links.
+   - Keep production email delivery and agent APIs for later stages.
+9. **Stage 8: Agent-Friendly APIs**
    - Expose safe API surfaces for external assistants and automations.

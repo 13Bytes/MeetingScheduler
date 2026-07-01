@@ -21,8 +21,8 @@ const foundationItems = [
   },
   {
     icon: Mail,
-    label: "Email identity ready",
-    text: "Environment documentation leaves room for later passwordless identity flows.",
+    label: "Optional email recovery",
+    text: "Verify email with a passwordless magic link and recover attached memberships.",
   },
 ];
 

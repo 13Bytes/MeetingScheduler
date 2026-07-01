@@ -18,6 +18,7 @@ import type React from "react";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { AdminCalendarPainter } from "@/components/admin-calendar-painter";
+import { MembershipIdentityPanel } from "@/components/membership-identity-panel";
 import { MeetingResultsPanel } from "@/components/meeting-results-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,7 @@ type MeetingSummary = {
 type MembershipSummary = {
   role: "admin" | "member";
   displayName?: string;
+  emailIdentityId?: string;
 };
 
 type MembershipCapabilities = {
@@ -659,6 +661,11 @@ export function ParticipantAvailabilityPainter({
               </CardContent>
             </Card>
           ) : null}
+
+          <MembershipIdentityPanel
+            membershipToken={membershipToken ?? undefined}
+            attachedEmailIdentityId={data.membership?.emailIdentityId}
+          />
         </aside>
       </div>
     </div>

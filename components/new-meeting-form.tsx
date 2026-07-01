@@ -26,6 +26,7 @@ type PrivacyMode = "detailed" | "summaryOnly";
 type CreateMeetingArgs = {
   title: string;
   description?: string;
+  creatorEmail?: string;
   creatorPrivacyMode: PrivacyMode;
   adminMode: AdminMode;
   settings: {
@@ -48,6 +49,7 @@ export function NewMeetingForm({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [creatorEmail, setCreatorEmail] = useState("");
   const [timeZone, setTimeZone] = useState(getDefaultTimeZone);
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [granularityMinutes, setGranularityMinutes] = useState("30");
@@ -146,6 +148,7 @@ export function NewMeetingForm({
       const result = await createMeeting({
         title: title.trim(),
         ...(description.trim() ? { description: description.trim() } : {}),
+        ...(creatorEmail.trim() ? { creatorEmail: creatorEmail.trim() } : {}),
         creatorPrivacyMode,
         adminMode: everyoneAdmin ? "everyoneAdmin" : "roleBased",
         settings: {
@@ -225,6 +228,19 @@ export function NewMeetingForm({
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Add agenda, context, or location notes."
+              />
+            </label>
+            <label className="grid gap-2 md:col-span-2">
+              <span className="text-sm font-medium text-foreground">
+                Recovery email{" "}
+                <span className="font-normal text-slate-500">optional</span>
+              </span>
+              <input
+                className={inputClassName}
+                type="email"
+                value={creatorEmail}
+                onChange={(event) => setCreatorEmail(event.target.value)}
+                placeholder="ada@example.com"
               />
             </label>
             <label className="grid gap-2">

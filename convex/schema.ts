@@ -55,6 +55,17 @@ export default defineSchema({
     .index("by_email_identity", ["emailIdentityId"])
     .index("by_token_hash", ["tokenHash"]),
 
+  membershipAccessTokens: defineTable({
+    membershipId: v.id("memberships"),
+    ...tokenFieldsValidator,
+    tokenLastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_membership", ["membershipId"])
+    .index("by_token_hash", ["tokenHash"]),
+
   allowedTimeRanges: defineTable({
     meetingId: v.id("meetings"),
     startUtc: v.string(),
