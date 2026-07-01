@@ -344,14 +344,16 @@ export function isSlotFullyCoveredByAllowedRanges(
   const startMs = Date.parse(normalizeIsoInstant("startUtc", slot.startUtc));
   const endMs = Date.parse(normalizeIsoInstant("endUtc", slot.endUtc));
   const granularityMs = granularityMinutes * 60 * 1000;
+  const parsedRanges = allowedTimeRanges.map((range) => ({
+    startMs: Date.parse(range.startUtc),
+    endMs: Date.parse(range.endUtc),
+  }));
 
   for (let cellStartMs = startMs; cellStartMs < endMs; cellStartMs += granularityMs) {
     const cellEndMs = cellStartMs + granularityMs;
-    const isCovered = allowedTimeRanges.some((range) => {
-      const rangeStartMs = Date.parse(range.startUtc);
-      const rangeEndMs = Date.parse(range.endUtc);
-      return cellStartMs >= rangeStartMs && cellEndMs <= rangeEndMs;
-    });
+    const isCovered = parsedRanges.some(
+      (range) => cellStartMs >= range.startMs && cellEndMs <= range.endMs,
+    );
     if (!isCovered) {
       return false;
     }

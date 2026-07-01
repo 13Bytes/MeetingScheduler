@@ -67,8 +67,8 @@ export function buildLifecycleNotificationPlaceholders<
       status: "pending" as const,
       dedupeKey: `${args.kind}:${args.meetingId}:${args.lifecycleRevision}:${membership._id}`,
       payload: {
-        lifecycleRevision: args.lifecycleRevision,
         ...args.payload,
+        lifecycleRevision: args.lifecycleRevision,
       },
       attempts: 0,
       createdAt: args.now,

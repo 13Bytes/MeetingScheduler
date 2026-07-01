@@ -60,7 +60,7 @@ describe("finalization side effects", () => {
       ],
       kind: "meeting.finalized",
       lifecycleRevision: 4,
-      payload: finalizedSlot,
+      payload: { ...finalizedSlot, lifecycleRevision: 99 },
       now: 1234,
     });
 
