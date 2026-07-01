@@ -50,6 +50,37 @@ describe("MembershipIdentityPanel", () => {
       }),
     );
   });
+
+  it("syncs attached state when membership data refreshes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          signedIn: true,
+          normalizedEmail: "ada@example.com",
+          expiresAt: Date.now() + 1_000,
+        }),
+      ),
+    );
+
+    const { rerender } = render(
+      <MembershipIdentityPanel membershipToken="member-secret" />,
+    );
+    expect(
+      await screen.findByRole("button", { name: /attach to this membership/i }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <MembershipIdentityPanel
+        membershipToken="member-secret"
+        attachedEmailIdentityId="email-1"
+      />,
+    );
+
+    expect(
+      screen.getByText(/this membership has email recovery attached/i),
+    ).toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown) {

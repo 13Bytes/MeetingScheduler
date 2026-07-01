@@ -942,7 +942,16 @@ export const listIdentityDashboard = query({
       .query("memberships")
       .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", identity._id))
       .collect();
-    const rows = [];
+    const rows: {
+      _id: Id<"memberships">;
+      meetingId: Id<"meetings">;
+      role: MembershipRole;
+      displayName?: string;
+      revokedAt?: number;
+      updatedAt: number;
+      hasAvailability: boolean;
+      meeting: ReturnType<typeof redactPublicMeeting>;
+    }[] = [];
     for (const membership of memberships) {
       const meeting = await ctx.db.get(membership.meetingId);
       if (!meeting) {

@@ -27,7 +27,8 @@ export function MembershipIdentityPanel({
   const [devMagicLinkUrl, setDevMagicLinkUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const [isAttached, setIsAttached] = useState(Boolean(attachedEmailIdentityId));
+  const [justAttached, setJustAttached] = useState(false);
+  const isAttached = Boolean(attachedEmailIdentityId) || justAttached;
 
   useEffect(() => {
     let isMounted = true;
@@ -97,7 +98,7 @@ export function MembershipIdentityPanel({
       if (!response.ok) {
         throw new Error(body.error ?? "Unable to attach this membership.");
       }
-      setIsAttached(true);
+      setJustAttached(true);
       setStatus("This membership is now recoverable from your verified email.");
     } catch (caughtError) {
       setError(
