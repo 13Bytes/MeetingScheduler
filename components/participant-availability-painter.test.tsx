@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ParticipantAvailabilityPainter } from "@/components/participant-availability-painter";
+import type { MeetingResults } from "@/lib/meeting-results";
 
 const meeting = {
   title: "Stage 4 planning",
@@ -26,6 +27,52 @@ const baseData = {
     canEditAvailability: true,
   },
   ownAvailabilityRecords: [],
+};
+
+const results: MeetingResults = {
+  generatedAt: 123,
+  timeZone: "Europe/Berlin",
+  granularityMinutes: 30,
+  durationMinutes: 60,
+  totalParticipantCount: 1,
+  candidateCount: 1,
+  detailsVisible: false,
+  candidates: [
+    {
+      startUtc: "2026-06-25T07:00:00.000Z",
+      endUtc: "2026-06-25T08:00:00.000Z",
+      timeZone: "Europe/Berlin",
+      coveredCellKeys: [
+        "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+        "2026-06-25T07:30:00.000Z_2026-06-25T08:00:00.000Z",
+      ],
+      availableParticipantCount: 1,
+      unavailableParticipantCount: 0,
+      totalParticipantCount: 1,
+      reluctantVoteCount: 0,
+      yesVoteCount: 2,
+      scorePercent: 100,
+      rank: 1,
+    },
+  ],
+  shortlist: [
+    {
+      startUtc: "2026-06-25T07:00:00.000Z",
+      endUtc: "2026-06-25T08:00:00.000Z",
+      timeZone: "Europe/Berlin",
+      coveredCellKeys: [
+        "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+        "2026-06-25T07:30:00.000Z_2026-06-25T08:00:00.000Z",
+      ],
+      availableParticipantCount: 1,
+      unavailableParticipantCount: 0,
+      totalParticipantCount: 1,
+      reluctantVoteCount: 0,
+      yesVoteCount: 2,
+      scorePercent: 100,
+      rank: 1,
+    },
+  ],
 };
 
 describe("ParticipantAvailabilityPainter", () => {
@@ -237,8 +284,17 @@ describe("ParticipantAvailabilityPainter", () => {
       <ParticipantAvailabilityPainter
         data={{
           ...baseData,
-          meeting: { ...meeting, lifecycleState: "finalized" },
+          meeting: {
+            ...meeting,
+            lifecycleState: "finalized",
+            finalizedSlot: {
+              startUtc: "2026-06-25T07:00:00.000Z",
+              endUtc: "2026-06-25T08:00:00.000Z",
+              timeZone: "Europe/Berlin",
+            },
+          },
           capabilities: { canAdminister: false, canEditAvailability: false },
+          results,
         }}
         onSaveAvailability={vi.fn()}
         baseDate={new Date("2026-06-25T06:00:00.000Z")}
@@ -246,6 +302,10 @@ describe("ParticipantAvailabilityPainter", () => {
     );
 
     expect(screen.getByText(/finalized meeting/i)).toBeInTheDocument();
+    expect(screen.getByText(/final time/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/thu, jun 25, 9:00 am-10:00 am/i).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByRole("button", { name: /join and save/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^yes$/i })).toBeDisabled();
   });

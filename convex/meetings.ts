@@ -19,6 +19,11 @@ import {
   transitionMeetingLifecycle,
 } from "./domain/model";
 import type { MembershipRole, PrivacyMode } from "./domain/model";
+import {
+  buildFinalizeMeetingPatch,
+  buildLifecycleNotificationPlaceholders,
+  buildReopenMeetingPatch,
+} from "./domain/finalization";
 import { createSecretToken, hashSecretToken } from "./domain/tokens";
 import {
   buildMeetingResults,
@@ -384,6 +389,10 @@ export const updateMembershipDisplayName = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    const meeting = await requireMeeting(ctx, membership.meetingId);
+    if (meeting.lifecycleState !== "open") {
+      throw new Error("Finalized meetings are read-only until reopened");
+    }
     const displayName = normalizeParticipantDisplayName(args.displayName);
 
     await ctx.db.patch(membership._id, {
@@ -467,7 +476,7 @@ export const updateMeetingSettings = mutation({
 export const finalizeMeeting = mutation({
   args: {
     membershipToken: v.string(),
-    finalizedSlot: v.optional(finalizedSlotValidator),
+    finalizedSlot: finalizedSlotValidator,
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -478,24 +487,39 @@ export const finalizeMeeting = mutation({
       membership,
       "finalize",
     );
-    const finalizedSlot = args.finalizedSlot
-      ? normalizeFinalizedSlot(args.finalizedSlot, meeting)
-      : undefined;
-
-    await ctx.db.patch(meeting._id, {
-      lifecycleState: nextLifecycleState,
-      lifecycleRevision: meeting.lifecycleRevision + 1,
+    const finalizedSlot = normalizeFinalizedSlot(args.finalizedSlot, meeting);
+    const meetingPatch = buildFinalizeMeetingPatch({
+      lifecycleRevision: meeting.lifecycleRevision,
       finalizedAt: now,
       finalizedByMembershipId: membership._id,
       finalizedSlot,
-      updatedAt: now,
+    });
+
+    await ctx.db.patch(meeting._id, {
+      ...meetingPatch,
+      lifecycleState: nextLifecycleState,
     });
 
     await insertAuditEvent(ctx, {
       meetingId: meeting._id,
       actorMembershipId: membership._id,
       kind: "meeting.finalized",
-      metadata: {},
+      metadata: {
+        startUtc: finalizedSlot.startUtc,
+        endUtc: finalizedSlot.endUtc,
+        timeZone: finalizedSlot.timeZone,
+      },
+      now,
+    });
+    await insertNotificationPlaceholdersForMeeting(ctx, {
+      meetingId: meeting._id,
+      kind: "meeting.finalized",
+      lifecycleRevision: meetingPatch.lifecycleRevision,
+      payload: {
+        startUtc: finalizedSlot.startUtc,
+        endUtc: finalizedSlot.endUtc,
+        timeZone: finalizedSlot.timeZone,
+      },
       now,
     });
 
@@ -512,16 +536,15 @@ export const reopenMeeting = mutation({
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
     const meeting = await requireMeeting(ctx, membership.meetingId);
     const nextLifecycleState = transitionMeetingLifecycle(meeting, membership, "reopen");
-
-    await ctx.db.patch(meeting._id, {
-      lifecycleState: nextLifecycleState,
-      lifecycleRevision: meeting.lifecycleRevision + 1,
-      finalizedAt: undefined,
-      finalizedByMembershipId: undefined,
-      finalizedSlot: undefined,
+    const meetingPatch = buildReopenMeetingPatch({
+      lifecycleRevision: meeting.lifecycleRevision,
       reopenedAt: now,
       reopenedByMembershipId: membership._id,
-      updatedAt: now,
+    });
+
+    await ctx.db.patch(meeting._id, {
+      ...meetingPatch,
+      lifecycleState: nextLifecycleState,
     });
 
     await insertAuditEvent(ctx, {
@@ -529,6 +552,13 @@ export const reopenMeeting = mutation({
       actorMembershipId: membership._id,
       kind: "meeting.reopened",
       metadata: {},
+      now,
+    });
+    await insertNotificationPlaceholdersForMeeting(ctx, {
+      meetingId: meeting._id,
+      kind: "meeting.reopened",
+      lifecycleRevision: meetingPatch.lifecycleRevision,
+      payload: {},
       now,
     });
 
@@ -1063,6 +1093,34 @@ async function insertAuditEvent(
     metadata: args.metadata,
     createdAt: args.now,
   });
+}
+
+async function insertNotificationPlaceholdersForMeeting(
+  ctx: MutationLikeCtx,
+  args: {
+    meetingId: Id<"meetings">;
+    kind: "meeting.finalized" | "meeting.reopened";
+    lifecycleRevision: number;
+    payload: Record<string, string | number | boolean | null>;
+    now: number;
+  },
+) {
+  const memberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
+    .collect();
+  const placeholders = buildLifecycleNotificationPlaceholders({
+    meetingId: args.meetingId,
+    memberships,
+    kind: args.kind,
+    lifecycleRevision: args.lifecycleRevision,
+    payload: args.payload,
+    now: args.now,
+  });
+
+  for (const placeholder of placeholders) {
+    await ctx.db.insert("notificationOutbox", placeholder);
+  }
 }
 
 async function saveAvailabilityRecord(

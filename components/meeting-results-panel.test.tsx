@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { MeetingResultsPanel } from "@/components/meeting-results-panel";
 import type { MeetingResults, ScoredCandidateSlot } from "@/lib/meeting-results";
 
@@ -95,5 +95,145 @@ describe("MeetingResultsPanel", () => {
     );
 
     expect(screen.getByText(/no participants have joined yet/i)).toBeInTheDocument();
+  });
+
+  it("lets admins finalize the recommended shortlist selection", async () => {
+    const onFinalize = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MeetingResultsPanel
+        results={detailedResults}
+        canAdminister
+        canFinalize
+        onFinalize={onFinalize}
+      />,
+    );
+
+    expect(
+      screen.getByText(/confirm thu, jun 25, 9:00 am-10:00 am/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /finalize selected time/i }));
+
+    await waitFor(() =>
+      expect(onFinalize).toHaveBeenCalledWith({
+        startUtc: "2026-06-25T07:00:00.000Z",
+        endUtc: "2026-06-25T08:00:00.000Z",
+        timeZone: "Europe/Berlin",
+      }),
+    );
+  });
+
+  it("lets admins override recommendations with any candidate slot", async () => {
+    const overrideCandidate: ScoredCandidateSlot = {
+      ...candidateFixture,
+      startUtc: "2026-06-25T08:00:00.000Z",
+      endUtc: "2026-06-25T09:00:00.000Z",
+      rank: 2,
+      availableParticipantCount: 1,
+      unavailableParticipantCount: 1,
+      scorePercent: 50,
+    };
+    const onFinalize = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidateCount: 2,
+          candidates: [candidateFixture, overrideCandidate],
+          shortlist: [candidateFixture],
+        }}
+        canAdminister
+        canFinalize
+        onFinalize={onFinalize}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/override final slot/i), {
+      target: { value: "2026-06-25T08:00:00.000Z_2026-06-25T09:00:00.000Z" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /finalize selected time/i }));
+
+    await waitFor(() =>
+      expect(onFinalize).toHaveBeenCalledWith({
+        startUtc: "2026-06-25T08:00:00.000Z",
+        endUtc: "2026-06-25T09:00:00.000Z",
+        timeZone: "Europe/Berlin",
+      }),
+    );
+  });
+
+  it("normalizes stale override selections after candidate refreshes", async () => {
+    const overrideCandidate: ScoredCandidateSlot = {
+      ...candidateFixture,
+      startUtc: "2026-06-25T08:00:00.000Z",
+      endUtc: "2026-06-25T09:00:00.000Z",
+      rank: 2,
+      availableParticipantCount: 1,
+      unavailableParticipantCount: 1,
+      scorePercent: 50,
+    };
+    const onFinalize = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidateCount: 2,
+          candidates: [candidateFixture, overrideCandidate],
+          shortlist: [candidateFixture],
+        }}
+        canAdminister
+        canFinalize
+        onFinalize={onFinalize}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/override final slot/i), {
+      target: { value: "2026-06-25T08:00:00.000Z_2026-06-25T09:00:00.000Z" },
+    });
+    rerender(
+      <MeetingResultsPanel
+        results={detailedResults}
+        canAdminister
+        canFinalize
+        onFinalize={onFinalize}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /finalize selected time/i }));
+
+    expect(screen.getByLabelText<HTMLSelectElement>(/override final slot/i).value).toBe(
+      "2026-06-25T07:00:00.000Z_2026-06-25T08:00:00.000Z",
+    );
+    await waitFor(() =>
+      expect(onFinalize).toHaveBeenCalledWith({
+        startUtc: "2026-06-25T07:00:00.000Z",
+        endUtc: "2026-06-25T08:00:00.000Z",
+        timeZone: "Europe/Berlin",
+      }),
+    );
+  });
+
+  it("shows the final selected slot and exposes reopen for admins", async () => {
+    const onReopen = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MeetingResultsPanel
+        results={detailedResults}
+        canAdminister
+        lifecycleState="finalized"
+        selectedSlot={{
+          startUtc: "2026-06-25T07:00:00.000Z",
+          endUtc: "2026-06-25T08:00:00.000Z",
+          timeZone: "Europe/Berlin",
+        }}
+        canReopen
+        onReopen={onReopen}
+      />,
+    );
+
+    expect(screen.getByText(/final time/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/thu, jun 25, 9:00 am-10:00 am/i).length).toBeGreaterThan(
+      0,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /reopen poll/i }));
+
+    await waitFor(() => expect(onReopen).toHaveBeenCalledTimes(1));
   });
 });

@@ -49,6 +49,12 @@ sets the state back to `open` and increments `lifecycleRevision`, preserving the
 fact that the poll was previously finalized through audit events and reopen
 metadata.
 
+Finalization requires an active admin and a selected slot. The slot is
+normalized to the meeting's canonical timezone, must match the meeting duration,
+must align to the granularity grid, and must still be fully covered by the
+current allowed-time cells. Reopening clears the current `finalizedSlot` while
+leaving availability records and meeting settings intact.
+
 Permission helpers in `convex/domain/model.ts` enforce:
 
 - Active admins can administer role-based meetings.
@@ -60,6 +66,10 @@ Permission helpers in `convex/domain/model.ts` enforce:
 Participant availability saves use the same lifecycle and membership checks.
 Clearing a cell deletes that member's availability record for the cell; it does
 not create a fourth persisted response value.
+
+Finalization and reopening queue `notificationOutbox` placeholder rows for
+active memberships with email identities. Stage 6 does not send email; the
+outbox only records enough metadata for a later delivery worker.
 
 ## Results and Privacy
 
