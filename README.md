@@ -1,10 +1,10 @@
 # Meeting Scheduler
 
-A Stage 5 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 6 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
 backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
 meeting creation flow, an admin calendar constraint painter, and participant
-availability painting with live result recommendations.
+availability painting with live result recommendations and admin finalization.
 
 ## Stack
 
@@ -21,7 +21,8 @@ user-facing creation flow. Stage 3 adds the admin setup/editing experience for
 painting broad allowed candidate time regions. Stage 4 adds the participant
 join/return flow for painting yes, reluctant, no, or unset availability over
 admin-allowed cells. Stage 5 adds realtime candidate scoring, recommendation
-ranking, and privacy-aware result display.
+ranking, and privacy-aware result display. Stage 6 adds admin final selection,
+selected-slot display, and reopening.
 
 Core Convex tables:
 
@@ -163,9 +164,35 @@ privacy permits. Public viewers and summary-only participant views receive
 aggregate counts and scores only; admins can see details when their membership
 has admin capability.
 
-Stage 5 still only recommends and visualizes. Admin finalization, passwordless
-email identity UI, email notification delivery, cookie-backed anonymous
-recovery, and AI-agent APIs remain deferred.
+Stage 6 builds on these live recommendations with the finalization and reopening
+flow below. Passwordless email identity UI, real email delivery, cookie-backed
+anonymous recovery, and AI-agent APIs remain deferred.
+
+## Finalization and Reopening
+
+Stage 6 lets admin-capable memberships choose a final meeting time from the
+recommended shortlist or override to any currently valid candidate slot. The
+confirmation panel shows the timezone-aware start/end window, duration, rank,
+attendee count, reluctant-cell count, and meeting timezone before the admin
+finalizes.
+
+The Convex `finalizeMeeting` mutation requires an active admin membership and an
+open meeting. It revalidates the selected slot against the current meeting
+duration, granularity, canonical timezone, and allowed-time cells so stale
+client candidates cannot be finalized after constraints change. The selected
+slot is stored on the meeting, the lifecycle moves to `finalized`, and public,
+member, and admin views show the final time while keeping results readable.
+
+Finalized polls are read-only: participant availability painting, public
+joining, and admin constraint painting are disabled until an admin uses
+`reopenMeeting`. Reopening moves the lifecycle back to `open`, clears the current
+final slot, records reopen metadata/audit events, and preserves existing
+availability and settings for continued editing.
+
+When finalized or reopened, Convex queues placeholder `notificationOutbox`
+records for active memberships with email identities. These are intentionally
+not delivered yet; passwordless email identity UI, real email delivery,
+cookie-backed anonymous recovery, and AI-agent APIs remain deferred.
 
 ## Environment
 
@@ -241,8 +268,7 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 5 intentionally does not implement organizer finalization workflow,
-passwordless email identity UI, notification delivery, cookie-backed anonymous
-recovery, or AI-agent APIs. The creation, admin-editing, participant return, and
-results flows are link-based for now: each person must keep their personal
-membership URL.
+Stage 6 intentionally does not implement passwordless email identity UI, real
+email notification delivery, cookie-backed anonymous recovery, or AI-agent APIs.
+The creation, admin-editing, participant return, results, and finalization flows
+are link-based for now: each person must keep their personal membership URL.

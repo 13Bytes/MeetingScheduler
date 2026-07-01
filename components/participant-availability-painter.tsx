@@ -70,6 +70,7 @@ type MembershipSummary = {
 type MembershipCapabilities = {
   canAdminister: boolean;
   canEditAvailability: boolean;
+  canFinalize?: boolean;
   canReopen?: boolean;
 };
 
@@ -89,6 +90,11 @@ type UpdateDisplayName = (
   membershipToken: string,
   displayName: string,
 ) => Promise<unknown>;
+type FinalSlot = {
+  startUtc: string;
+  endUtc: string;
+  timeZone?: string;
+};
 
 export function ConnectedPublicParticipantMeeting({
   meetingSlug,
@@ -125,6 +131,7 @@ export function ConnectedPublicParticipantMeeting({
           canEditAvailability: meetingData.meeting.lifecycleState === "open",
         },
         ownAvailabilityRecords: [],
+        results: meetingData.results,
       }}
       onCreateMembership={async (displayName) =>
         createParticipantMembership({
@@ -150,6 +157,8 @@ export function ConnectedMembershipAvailability({
   });
   const saveAvailabilityRecords = useMutation(api.meetings.saveAvailabilityRecords);
   const updateMeetingSettings = useMutation(api.meetings.updateMeetingSettings);
+  const finalizeMeeting = useMutation(api.meetings.finalizeMeeting);
+  const reopenMeeting = useMutation(api.meetings.reopenMeeting);
   const updateMembershipDisplayName = useMutation(
     api.meetings.updateMembershipDisplayName,
   );
@@ -184,6 +193,10 @@ export function ConnectedMembershipAvailability({
             displayName: nextDisplayName,
           })
         }
+        onFinalizeMeeting={(token, finalizedSlot) =>
+          finalizeMeeting({ membershipToken: token, finalizedSlot })
+        }
+        onReopenMeeting={(token) => reopenMeeting({ membershipToken: token })}
       />
 
       {canAdminister ? (
@@ -243,6 +256,8 @@ export function ParticipantAvailabilityPainter({
   onCreateMembership,
   onSaveAvailability,
   onUpdateDisplayName,
+  onFinalizeMeeting,
+  onReopenMeeting,
   baseDate,
 }: {
   data: ParticipantData;
@@ -250,6 +265,11 @@ export function ParticipantAvailabilityPainter({
   onCreateMembership?: (displayName: string) => Promise<{ membershipToken: string }>;
   onSaveAvailability: SaveAvailability;
   onUpdateDisplayName?: UpdateDisplayName;
+  onFinalizeMeeting?: (
+    membershipToken: string,
+    finalizedSlot: FinalSlot,
+  ) => Promise<unknown>;
+  onReopenMeeting?: (membershipToken: string) => Promise<unknown>;
   baseDate?: Date;
 }) {
   const { meeting } = data;
@@ -465,6 +485,28 @@ export function ParticipantAvailabilityPainter({
         <MeetingResultsPanel
           results={data.results}
           canAdminister={data.capabilities.canAdminister}
+          lifecycleState={meeting.lifecycleState}
+          selectedSlot={meeting.finalizedSlot}
+          canFinalize={Boolean(
+            membershipToken &&
+            data.capabilities.canFinalize &&
+            meeting.lifecycleState === "open",
+          )}
+          canReopen={Boolean(
+            membershipToken &&
+            data.capabilities.canReopen &&
+            meeting.lifecycleState === "finalized",
+          )}
+          onFinalize={
+            onFinalizeMeeting && membershipToken
+              ? (finalizedSlot) => onFinalizeMeeting(membershipToken, finalizedSlot)
+              : undefined
+          }
+          onReopen={
+            onReopenMeeting && membershipToken
+              ? () => onReopenMeeting(membershipToken)
+              : undefined
+          }
         />
       ) : null}
 

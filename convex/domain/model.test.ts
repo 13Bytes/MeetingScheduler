@@ -4,6 +4,7 @@ import {
   assertAvailabilityCellAlignment,
   assertAvailabilityCellDuration,
   getMembershipCapabilities,
+  isSlotFullyCoveredByAllowedRanges,
   makeAvailabilityCellKey,
   normalizeFinalizedSlot,
   normalizeEmailAddress,
@@ -289,7 +290,117 @@ describe("schema-adjacent helpers", () => {
         },
         meeting,
       ),
-    ).toThrow(/inside an allowed time range/u);
+    ).toThrow(/fully covered by allowed time ranges/u);
+  });
+
+  it("allows final slots to span adjacent allowed cells", () => {
+    const meeting = {
+      canonicalTimeZone: "Europe/Berlin",
+      durationMinutes: 60,
+      granularityMinutes: 30,
+      allowedTimeRanges: [
+        {
+          startUtc: "2026-06-24T07:00:00.000Z",
+          endUtc: "2026-06-24T07:30:00.000Z",
+          timeZone: "Europe/Berlin",
+        },
+        {
+          startUtc: "2026-06-24T07:30:00.000Z",
+          endUtc: "2026-06-24T08:00:00.000Z",
+          timeZone: "Europe/Berlin",
+        },
+      ],
+    };
+
+    expect(
+      normalizeFinalizedSlot(
+        {
+          startUtc: "2026-06-24T09:00:00+02:00",
+          endUtc: "2026-06-24T10:00:00+02:00",
+        },
+        meeting,
+      ),
+    ).toMatchObject({
+      startUtc: "2026-06-24T07:00:00.000Z",
+      endUtc: "2026-06-24T08:00:00.000Z",
+      timeZone: "Europe/Berlin",
+    });
+  });
+
+  it("rejects stale final slots with gaps in the current allowed cells", () => {
+    const allowedTimeRanges = [
+      {
+        startUtc: "2026-06-24T07:00:00.000Z",
+        endUtc: "2026-06-24T07:30:00.000Z",
+        timeZone: "Europe/Berlin",
+      },
+      {
+        startUtc: "2026-06-24T08:00:00.000Z",
+        endUtc: "2026-06-24T08:30:00.000Z",
+        timeZone: "Europe/Berlin",
+      },
+    ];
+
+    expect(
+      isSlotFullyCoveredByAllowedRanges(
+        {
+          startUtc: "2026-06-24T07:00:00.000Z",
+          endUtc: "2026-06-24T08:00:00.000Z",
+        },
+        allowedTimeRanges,
+        30,
+      ),
+    ).toBe(false);
+    expect(() =>
+      normalizeFinalizedSlot(
+        {
+          startUtc: "2026-06-24T09:00:00+02:00",
+          endUtc: "2026-06-24T10:00:00+02:00",
+        },
+        {
+          canonicalTimeZone: "Europe/Berlin",
+          durationMinutes: 60,
+          granularityMinutes: 30,
+          allowedTimeRanges,
+        },
+      ),
+    ).toThrow(/fully covered/u);
+  });
+
+  it("requires finalized slots to use the meeting timezone and local grid", () => {
+    const meeting = {
+      canonicalTimeZone: "Asia/Kathmandu",
+      durationMinutes: 30,
+      granularityMinutes: 15,
+      allowedTimeRanges: [
+        {
+          startUtc: "2026-06-23T18:15:00.000Z",
+          endUtc: "2026-06-23T19:00:00.000Z",
+          timeZone: "Asia/Kathmandu",
+        },
+      ],
+    };
+
+    expect(() =>
+      normalizeFinalizedSlot(
+        {
+          startUtc: "2026-06-23T18:15:00.000Z",
+          endUtc: "2026-06-23T18:45:00.000Z",
+          timeZone: "UTC",
+        },
+        meeting,
+      ),
+    ).toThrow(/timezone must match/u);
+
+    expect(() =>
+      normalizeFinalizedSlot(
+        {
+          startUtc: "2026-06-23T18:15:00.000Z",
+          endUtc: "2026-06-23T18:45:00.000Z",
+        },
+        meeting,
+      ),
+    ).not.toThrow();
   });
 
   it("normalizes slugs and email identities", () => {

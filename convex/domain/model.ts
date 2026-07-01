@@ -295,12 +295,19 @@ export function normalizeFinalizedSlot(
     allowedTimeRanges: AllowedTimeRange[];
   },
 ): Slot {
-  const slot = normalizeAllowedTimeRange(input, meeting.canonicalTimeZone);
+  if (input.timeZone && input.timeZone !== meeting.canonicalTimeZone) {
+    throw new Error("Finalized slot timezone must match the meeting timezone");
+  }
+
+  const slot = normalizeAllowedTimeRange(
+    { ...input, timeZone: meeting.canonicalTimeZone },
+    meeting.canonicalTimeZone,
+  );
   assertAvailabilityCellAlignment(
     slot.startUtc,
     slot.endUtc,
     meeting.granularityMinutes,
-    slot.timeZone,
+    meeting.canonicalTimeZone,
   );
 
   const durationMs = Date.parse(slot.endUtc) - Date.parse(slot.startUtc);
@@ -308,8 +315,14 @@ export function normalizeFinalizedSlot(
     throw new Error("Finalized slot must match the meeting duration");
   }
 
-  if (!isSlotInsideAllowedRanges(slot, meeting.allowedTimeRanges)) {
-    throw new Error("Finalized slot must be inside an allowed time range");
+  if (
+    !isSlotFullyCoveredByAllowedRanges(
+      slot,
+      meeting.allowedTimeRanges,
+      meeting.granularityMinutes,
+    )
+  ) {
+    throw new Error("Finalized slot must be fully covered by allowed time ranges");
   }
 
   return {
@@ -317,6 +330,34 @@ export function normalizeFinalizedSlot(
     endUtc: slot.endUtc,
     timeZone: slot.timeZone,
   };
+}
+
+export function isSlotFullyCoveredByAllowedRanges(
+  slot: SlotInput,
+  allowedTimeRanges: AllowedTimeRange[],
+  granularityMinutes: number,
+): boolean {
+  if (allowedTimeRanges.length === 0) {
+    return false;
+  }
+
+  const startMs = Date.parse(normalizeIsoInstant("startUtc", slot.startUtc));
+  const endMs = Date.parse(normalizeIsoInstant("endUtc", slot.endUtc));
+  const granularityMs = granularityMinutes * 60 * 1000;
+
+  for (let cellStartMs = startMs; cellStartMs < endMs; cellStartMs += granularityMs) {
+    const cellEndMs = cellStartMs + granularityMs;
+    const isCovered = allowedTimeRanges.some((range) => {
+      const rangeStartMs = Date.parse(range.startUtc);
+      const rangeEndMs = Date.parse(range.endUtc);
+      return cellStartMs >= rangeStartMs && cellEndMs <= rangeEndMs;
+    });
+    if (!isCovered) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function isSlotInsideAllowedRanges(

@@ -55,7 +55,12 @@ collaboration, and later AI-agent-friendly APIs.
      detailed display.
    - Keep finalization, passwordless email identity, notification delivery, and
      agent APIs for later stages.
-7. **Stage 6: Finalization and Notifications**
-   - Add organizer finalization and email notifications.
+7. **Stage 6: Finalization and Reopening**
+   - Let admins choose the final meeting slot from recommendations or any valid
+     candidate override.
+   - Store and display the selected final slot on public/member/admin views.
+   - Make finalized polls read-only until an admin reopens them.
+   - Queue notification placeholders only; keep real email delivery,
+     passwordless identity UI, and agent APIs for later stages.
 8. **Stage 7: Agent-Friendly APIs**
    - Expose safe API surfaces for external assistants and automations.
