@@ -21,6 +21,8 @@ export const availabilityResponseValidator = v.union(
 );
 
 export const notificationStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("sending"),
   v.literal("pending"),
   v.literal("sent"),
   v.literal("failed"),

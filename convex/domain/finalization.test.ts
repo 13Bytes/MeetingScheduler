@@ -54,9 +54,17 @@ describe("finalization side effects", () => {
       meetingId: "meeting-1",
       memberships: [
         { _id: "admin-1", emailIdentityId: "email-1" },
+        { _id: "admin-2", emailIdentityId: "email-1" },
         { _id: "member-1" },
         { _id: "member-2", emailIdentityId: "email-2", revokedAt: 999 },
         { _id: "member-3", emailIdentityId: "email-3" },
+        { _id: "member-4", emailIdentityId: "email-4" },
+      ],
+      emailIdentities: [
+        { _id: "email-1", normalizedEmail: "admin@example.com", verifiedAt: 100 },
+        { _id: "email-2", normalizedEmail: "revoked@example.com", verifiedAt: 100 },
+        { _id: "email-3", normalizedEmail: "member@example.com", verifiedAt: 100 },
+        { _id: "email-4", normalizedEmail: "unverified@example.com" },
       ],
       kind: "meeting.finalized",
       lifecycleRevision: 4,
@@ -70,8 +78,8 @@ describe("finalization side effects", () => {
         membershipId: "admin-1",
         emailIdentityId: "email-1",
         kind: "meeting.finalized",
-        status: "pending",
-        dedupeKey: "meeting.finalized:meeting-1:4:admin-1",
+        status: "queued",
+        dedupeKey: "meeting.finalized:meeting-1:4:email-1",
         payload: { lifecycleRevision: 4, ...finalizedSlot },
         attempts: 0,
         createdAt: 1234,
@@ -82,12 +90,35 @@ describe("finalization side effects", () => {
         membershipId: "member-3",
         emailIdentityId: "email-3",
         kind: "meeting.finalized",
-        status: "pending",
-        dedupeKey: "meeting.finalized:meeting-1:4:member-3",
+        status: "queued",
+        dedupeKey: "meeting.finalized:meeting-1:4:email-3",
         payload: { lifecycleRevision: 4, ...finalizedSlot },
         attempts: 0,
         createdAt: 1234,
         updatedAt: 1234,
+      },
+    ]);
+  });
+
+  it("builds reopen notification placeholders with a distinct lifecycle revision", () => {
+    expect(
+      buildLifecycleNotificationPlaceholders({
+        meetingId: "meeting-1",
+        memberships: [{ _id: "member-1", emailIdentityId: "email-1" }],
+        emailIdentities: [
+          { _id: "email-1", normalizedEmail: "member@example.com", verifiedAt: 100 },
+        ],
+        kind: "meeting.reopened",
+        lifecycleRevision: 5,
+        payload: {},
+        now: 5678,
+      }),
+    ).toMatchObject([
+      {
+        kind: "meeting.reopened",
+        status: "queued",
+        dedupeKey: "meeting.reopened:meeting-1:5:email-1",
+        payload: { lifecycleRevision: 5 },
       },
     ]);
   });
