@@ -103,7 +103,7 @@ describe("identity verification email request route", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("does not mark delivery failed when sent-status recording fails", async () => {
+  it("returns success when sent-status recording fails after delivery", async () => {
     process.env.MEETING_SCHEDULER_APP_URL = "https://app.example.com";
     mutationMock
       .mockResolvedValueOnce({
@@ -128,8 +128,12 @@ describe("identity verification email request route", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(body.error).toMatch(/mark sent failed/);
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      deliveryQueued: true,
+      tokenFingerprint: "fingerprint-1",
+      expiresAt: Date.parse("2026-07-02T10:00:00.000Z"),
+    });
     expect(sendMock).toHaveBeenCalledOnce();
     expect(mutationMock).toHaveBeenCalledTimes(2);
   });

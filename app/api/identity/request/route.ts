@@ -63,12 +63,16 @@ export async function POST(request: Request) {
       });
       throw deliveryError;
     }
-    await convex.mutation(api.meetings.markNotificationSent, {
-      internalSecret: getInternalIdentitySecret(),
-      notificationId: result.notificationOutboxId,
-      provider: delivery.provider,
-      providerMessageId: delivery.providerMessageId,
-    });
+    try {
+      await convex.mutation(api.meetings.markNotificationSent, {
+        internalSecret: getInternalIdentitySecret(),
+        notificationId: result.notificationOutboxId,
+        provider: delivery.provider,
+        providerMessageId: delivery.providerMessageId,
+      });
+    } catch (statusError) {
+      console.error("Failed to mark verification email sent", statusError);
+    }
 
     return NextResponse.json({
       deliveryQueued: result.deliveryQueued,

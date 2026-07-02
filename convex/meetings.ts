@@ -698,11 +698,10 @@ export const listQueuedEmailNotifications = query({
       if (notificationIds.length >= limit) {
         break;
       }
-      const remaining = limit - notificationIds.length;
       const notifications = await ctx.db
         .query("notificationOutbox")
         .withIndex("by_status", (q) => q.eq("status", status))
-        .take(remaining);
+        .collect();
       for (const notification of notifications) {
         if (
           notificationIds.length < limit &&
@@ -776,6 +775,7 @@ export const claimNotificationForDelivery = mutation({
       !meeting ||
       !membership ||
       membership.revokedAt !== undefined ||
+      membership.meetingId !== notification.meetingId ||
       membership.emailIdentityId !== notification.emailIdentityId ||
       !identity?.verifiedAt
     ) {
