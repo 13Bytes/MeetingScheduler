@@ -1,10 +1,11 @@
 # Meeting Scheduler
 
-A Stage 6 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 7 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
 backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
 meeting creation flow, an admin calendar constraint painter, and participant
-availability painting with live result recommendations and admin finalization.
+availability painting with live result recommendations, admin finalization, and
+optional passwordless email recovery.
 
 ## Stack
 
@@ -22,7 +23,8 @@ painting broad allowed candidate time regions. Stage 4 adds the participant
 join/return flow for painting yes, reluctant, no, or unset availability over
 admin-allowed cells. Stage 5 adds realtime candidate scoring, recommendation
 ranking, and privacy-aware result display. Stage 6 adds admin final selection,
-selected-slot display, and reopening.
+selected-slot display, and reopening. Stage 7 adds optional passwordless email
+identity for recovery.
 
 Core Convex tables:
 
@@ -30,6 +32,8 @@ Core Convex tables:
   duration, current allowed ranges, final slot metadata, and audit timestamps.
 - `memberships`: every person-meeting relationship, including role,
   privacy mode, optional email identity, and hashed personal secret-link token.
+- `membershipAccessTokens`: additional hashed membership bearer tokens minted
+  for verified email recovery, without invalidating existing secret links.
 - `allowedTimeRanges`: timezone-aware admin-defined windows for later calendar
   painting flows.
 - `availabilityRecords`: per-membership cell responses of `yes`, `reluctant`,
@@ -47,9 +51,15 @@ Key invariants:
 - Admin is a membership role. Multiple admins are allowed.
 - Meetings can enable `everyoneAdmin`, where any active member can administer.
 - Secret membership tokens are returned only at creation time. Magic-link issue
-  requests queue a notification placeholder and return only a fingerprint until
-  trusted out-of-band delivery exists. Convex stores SHA-256 hashes plus
-  hash-derived fingerprints, never raw tokens.
+  requests queue a notification placeholder and return only a fingerprint unless
+  local development explicitly enables dev magic-link exposure. Convex stores
+  SHA-256 hashes plus hash-derived fingerprints, never raw tokens.
+- Email identity is optional. A verified email can attach to memberships for
+  recovery, but it does not replace memberships and is never required to create
+  or answer a poll.
+- Verified email dashboard access is backed by a signed, HttpOnly, SameSite=Lax
+  session cookie. Server routes authorize dashboard and attach/recover actions
+  before calling Convex with an internal identity secret.
 - Meeting lifecycle is `open -> finalized -> open` through explicit admin
   transitions. Finalized meetings are read-only until reopened.
 - Meeting rules use a canonical IANA timezone and UTC-normalized range/cell
@@ -63,6 +73,8 @@ Key invariants:
 | ------------------------- | ------------------------------------------ |
 | `/`                       | Foundation overview and route entry points |
 | `/new`                    | Anonymous meeting creation flow            |
+| `/identity`               | Optional passwordless email verification   |
+| `/identity/dashboard`     | Verified email recovery dashboard          |
 | `/m/[meetingSlug]`        | Public participant join and response flow  |
 | `/join/[membershipToken]` | Secret member return link and admin setup  |
 
@@ -72,6 +84,7 @@ Key invariants:
 Stage 1 Convex `createMeeting` mutation. The flow collects:
 
 - title and optional description
+- optional recovery email
 - canonical IANA timezone
 - meeting duration and slot granularity
 - creator availability privacy mode
@@ -92,6 +105,33 @@ copyable links:
 
 Admin access uses the same membership-secret-link model as every other
 person-meeting relationship. There is no separate admin token model.
+
+## Passwordless Email Recovery
+
+Stage 7 adds optional email identity at `/identity` and in the membership
+sidebar. Users can request a passwordless magic link for a normalized email
+address. Consuming the link through `/identity/verify?token=...` marks the
+identity verified, consumes the hashed magic-link token once, and sets a signed
+HttpOnly session cookie.
+
+Verified users can attach the signed-in email identity to a membership they
+already control through its secret membership link. Memberships created with an
+optional email become recoverable after that same normalized email is verified.
+The recovery dashboard at `/identity/dashboard` lists only active memberships
+attached to the verified identity where the user is an admin or has submitted
+availability.
+
+Because raw membership tokens are not stored, recovery creates a new hashed
+secondary membership access token and shows the recovered `/join/[token]` link
+once. Existing secret membership links remain valid and independent of email
+login. Unverified email addresses never unlock dashboard rows or membership
+actions.
+
+Real email delivery is still deferred. Magic-link requests queue
+`notificationOutbox` rows containing only non-secret metadata. For local
+development only, set `MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true` in the
+Convex runtime to let the request API return a clickable dev magic link. Do not
+enable that flag in production.
 
 ## Admin Calendar Constraint Painter
 
@@ -165,8 +205,7 @@ aggregate counts and scores only; admins can see details when their membership
 has admin capability.
 
 Stage 6 builds on these live recommendations with the finalization and reopening
-flow below. Passwordless email identity UI, real email delivery, cookie-backed
-anonymous recovery, and AI-agent APIs remain deferred.
+flow below.
 
 ## Finalization and Reopening
 
@@ -191,8 +230,7 @@ availability and settings for continued editing.
 
 When finalized or reopened, Convex queues placeholder `notificationOutbox`
 records for active memberships with email identities. These are intentionally
-not delivered yet; passwordless email identity UI, real email delivery,
-cookie-backed anonymous recovery, and AI-agent APIs remain deferred.
+not delivered yet; real email delivery and AI-agent APIs remain deferred.
 
 ## Environment
 
@@ -209,8 +247,21 @@ Required for Convex-backed features:
 - `CONVEX_DEPLOYMENT`
 - `NEXT_PUBLIC_CONVEX_URL`
 - `NEXT_PUBLIC_CONVEX_SITE_URL`
+- `MEETING_SCHEDULER_IDENTITY_SESSION_SECRET` for signing email identity session
+  cookies in production. Local development falls back to a dev-only secret.
+- `MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET` shared by Next server routes and
+  Convex for email dashboard/attach/recover operations in production.
 
-Reserved for later stages:
+Optional local-development identity helper:
+
+- `MEETING_SCHEDULER_ALLOW_DEV_IDENTITY_SECRET=true` in both the Next.js and
+  explicit local/dev Convex runtimes enables the built-in dev internal secret.
+  Prefer setting the real internal secret in both runtimes when possible.
+- `MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true` in the Convex runtime returns
+  raw dev magic-link URLs from the request API. This is unsafe for production and
+  should only be used on a local machine.
+
+Reserved for later notification delivery:
 
 - `EMAIL_FROM`
 - `EMAIL_PROVIDER_API_KEY`
@@ -268,7 +319,7 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 6 intentionally does not implement passwordless email identity UI, real
-email notification delivery, cookie-backed anonymous recovery, or AI-agent APIs.
-The creation, admin-editing, participant return, results, and finalization flows
-are link-based for now: each person must keep their personal membership URL.
+Stage 7 intentionally does not implement production email notification delivery
+or AI-agent APIs. Passwordless identity is recovery-only: accounts are not
+required, passwords do not exist, and membership secret links remain the primary
+direct access credential.

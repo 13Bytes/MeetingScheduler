@@ -1,6 +1,8 @@
 export const routes = {
   home: "/",
   newMeeting: "/new",
+  identity: "/identity",
+  identityDashboard: "/identity/dashboard",
   meetingPoll: (meetingSlug: string) => `/m/${encodeURIComponent(meetingSlug)}`,
   membershipLink: (membershipToken: string) =>
     `/join/${encodeURIComponent(membershipToken)}`,
@@ -45,6 +47,14 @@ export const routeMap = [
   {
     path: routes.newMeeting,
     purpose: "Anonymous meeting creation flow.",
+  },
+  {
+    path: routes.identity,
+    purpose: "Optional passwordless email verification request flow.",
+  },
+  {
+    path: routes.identityDashboard,
+    purpose: "Verified email recovery dashboard for attached memberships.",
   },
   {
     path: "/m/[meetingSlug]",

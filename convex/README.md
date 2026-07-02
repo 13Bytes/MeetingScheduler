@@ -10,6 +10,9 @@ tokens, availability records, notifications, and audit events.
   granularity, duration, current allowed ranges, and final/reopen metadata.
 - `memberships` stores each person's relationship to a meeting. The membership
   is the authority boundary for admin/member permissions and personal links.
+- `membershipAccessTokens` stores additional hashed membership tokens minted by
+  verified email recovery. These tokens do not replace the original membership
+  token, so existing secret links remain valid.
 - `allowedTimeRanges` stores timezone-aware windows that later admin calendar
   painting can refine.
 - `availabilityRecords` stores cell-level `yes`, `reluctant`, or `no` responses
@@ -25,8 +28,8 @@ tokens, availability records, notifications, and audit events.
 
 Membership links and magic links are bearer secrets. Membership creation returns
 the raw personal link token once. Magic-link issue requests queue a notification
-placeholder and return only a fingerprint until a trusted out-of-band delivery
-path exists. The database stores:
+placeholder and return only a fingerprint unless local development explicitly
+enables dev magic-link exposure. The database stores:
 
 - `tokenHash`: a SHA-256 hash with an application context prefix.
 - `tokenFingerprint`: the first 16 characters of the hash digest for support
@@ -41,6 +44,11 @@ Stage 4 displays a raw membership token only as part of the current user's own
 personal `/join/[membershipToken]` link after joining or when they are already
 using that link. Public meeting reads and membership-token reads never return raw
 tokens from Convex.
+
+Stage 7 recovery mints a new secondary membership token when a verified email
+session asks to recover an attached membership. The raw recovered token is
+returned once through the server route and only its hash/fingerprint are stored.
+Magic links are consumed once and expired links cannot verify identity.
 
 ## Lifecycle and Permissions
 
@@ -68,8 +76,27 @@ Clearing a cell deletes that member's availability record for the cell; it does
 not create a fourth persisted response value.
 
 Finalization and reopening queue `notificationOutbox` placeholder rows for
-active memberships with email identities. Stage 6 does not send email; the
-outbox only records enough metadata for a later delivery worker.
+active memberships with email identities. Stage 7 does not send production
+email; the outbox only records enough metadata for a later delivery worker.
+
+## Passwordless Identity
+
+Email addresses are normalized and stored in `emailIdentities`. Verification
+requires consuming a hashed `emailVerification` magic link before the identity
+can be used for dashboard reads, membership attach, or link recovery.
+
+Next.js owns the signed HttpOnly email session cookie. Server routes verify that
+cookie, then call Convex identity functions with
+`MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET`. Convex functions also re-check that
+the identity is verified and that memberships are attached to the same identity.
+Unverified email records may exist as optional hints from creation, but they do
+not authorize recovery.
+
+The built-in dev internal secret is accepted only when both the Next.js runtime
+and the explicit local/dev Convex runtime set
+`MEETING_SCHEDULER_ALLOW_DEV_IDENTITY_SECRET=true`. Development magic-link
+exposure also requires an explicit local/dev runtime plus
+`MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true`.
 
 ## Results and Privacy
 

@@ -20,6 +20,14 @@ import {
 } from "./domain/model";
 import type { MembershipRole, PrivacyMode } from "./domain/model";
 import {
+  assertCanAttachEmailIdentityToMembership,
+  assertMagicLinkCanBeConsumed,
+  assertVerifiedEmailIdentity,
+  filterRecoverableDashboardMemberships,
+  isMembershipRecoverable,
+  normalizeMagicLinkExpiry,
+} from "./domain/identity";
+import {
   buildFinalizeMeetingPatch,
   buildLifecycleNotificationPlaceholders,
   buildReopenMeetingPatch,
@@ -38,7 +46,10 @@ import {
   privacyModeValidator,
 } from "./domain/validators";
 
-const MAX_MAGIC_LINK_TTL_MS = 30 * 60 * 1000;
+const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
+const DEV_INTERNAL_IDENTITY_SECRET =
+  "dev-only-meeting-scheduler-identity-internal-secret";
+const EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS = 5 * 60 * 1000;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -572,16 +583,14 @@ export const createMagicLink = mutation({
     displayName: v.optional(v.string()),
     purpose: v.union(v.literal("emailVerification"), v.literal("membershipRecovery")),
     membershipId: v.optional(v.id("memberships")),
-    expiresAt: v.number(),
+    expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    if (args.expiresAt <= now) {
-      throw new Error("Magic link expiry must be in the future");
-    }
-    if (args.expiresAt - now > MAX_MAGIC_LINK_TTL_MS) {
-      throw new Error("Magic link expiry exceeds the maximum lifetime");
-    }
+    const expiresAt = normalizeMagicLinkExpiry({
+      now,
+      requestedExpiresAt: args.expiresAt,
+    });
 
     const emailIdentityId = await upsertEmailIdentity(
       ctx,
@@ -594,6 +603,9 @@ export const createMagicLink = mutation({
       emailIdentityId,
       membershipId: args.membershipId,
     });
+    if (args.purpose === "emailVerification") {
+      await assertEmailVerificationRequestAllowed(ctx, emailIdentityId, now);
+    }
     const magicLinkToken = await createSecretToken("magicLink");
     const magicLinkId = await ctx.db.insert("magicLinks", {
       purpose: args.purpose,
@@ -604,7 +616,7 @@ export const createMagicLink = mutation({
       tokenFingerprint: magicLinkToken.tokenFingerprint,
       tokenVersion: 1,
       tokenCreatedAt: now,
-      expiresAt: args.expiresAt,
+      expiresAt,
       createdAt: now,
     });
 
@@ -627,8 +639,24 @@ export const createMagicLink = mutation({
     return {
       magicLinkId,
       tokenFingerprint: magicLinkToken.tokenFingerprint,
+      devMagicLinkToken: shouldExposeDevMagicLinkToken()
+        ? magicLinkToken.rawToken
+        : undefined,
       deliveryQueued: true,
     };
+  },
+});
+
+export const requestEmailVerification = mutation({
+  args: {
+    email: v.string(),
+    displayName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await createEmailVerificationMagicLink(ctx, {
+      email: args.email,
+      displayName: args.displayName,
+    });
   },
 });
 
@@ -811,8 +839,9 @@ export const consumeMagicLink = mutation({
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
       .unique();
 
-    if (!magicLink || magicLink.consumedAt || magicLink.expiresAt <= now) {
-      throw new Error("Magic link is invalid or expired");
+    assertMagicLinkCanBeConsumed(magicLink, now);
+    if (magicLink.purpose === "emailVerification") {
+      throw new Error("Use the email verification flow for this magic link");
     }
 
     await ctx.db.patch(magicLink._id, { consumedAt: now });
@@ -822,6 +851,264 @@ export const consumeMagicLink = mutation({
       emailIdentityId: magicLink.emailIdentityId,
       meetingId: magicLink.meetingId,
       membershipId: magicLink.membershipId,
+    };
+  },
+});
+
+export const completeEmailVerification = mutation({
+  args: {
+    magicLinkToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const tokenHash = await hashSecretToken(args.magicLinkToken);
+    const magicLink = await ctx.db
+      .query("magicLinks")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .unique();
+
+    assertMagicLinkCanBeConsumed(magicLink, now);
+    if (magicLink.purpose !== "emailVerification" || !magicLink.emailIdentityId) {
+      throw new Error("Magic link cannot verify an email identity");
+    }
+
+    const identity = await ctx.db.get(magicLink.emailIdentityId);
+    if (!identity) {
+      throw new Error("Email identity not found");
+    }
+
+    await ctx.db.patch(magicLink._id, { consumedAt: now });
+    await ctx.db.patch(identity._id, {
+      verifiedAt: identity.verifiedAt ?? now,
+      updatedAt: now,
+    });
+
+    return {
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+      verifiedAt: identity.verifiedAt ?? now,
+    };
+  },
+});
+
+export const attachVerifiedEmailIdentityToMembership = mutation({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+    membershipToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = Date.now();
+    const identity = await ctx.db.get(args.emailIdentityId);
+    assertVerifiedEmailIdentity(identity);
+
+    const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    assertCanAttachEmailIdentityToMembership({
+      membership: {
+        emailIdentityId: membership.emailIdentityId,
+      },
+      emailIdentityId: args.emailIdentityId,
+    });
+
+    await ctx.db.patch(membership._id, {
+      emailIdentityId: args.emailIdentityId,
+      updatedAt: now,
+    });
+    await insertAuditEvent(ctx, {
+      meetingId: membership.meetingId,
+      actorMembershipId: membership._id,
+      targetMembershipId: membership._id,
+      kind: "membership.email_identity_attached",
+      metadata: {},
+      now,
+    });
+
+    return {
+      membershipId: membership._id,
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+    };
+  },
+});
+
+export const listIdentityDashboard = query({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const identity = await ctx.db.get(args.emailIdentityId);
+    assertVerifiedEmailIdentity(identity);
+
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", identity._id))
+      .collect();
+    const rows: {
+      _id: Id<"memberships">;
+      meetingId: Id<"meetings">;
+      role: MembershipRole;
+      displayName?: string;
+      revokedAt?: number;
+      updatedAt: number;
+      hasAvailability: boolean;
+      meeting: ReturnType<typeof redactPublicMeeting>;
+    }[] = [];
+    for (const membership of memberships) {
+      const meeting = await ctx.db.get(membership.meetingId);
+      if (!meeting) {
+        continue;
+      }
+      const availability = await ctx.db
+        .query("availabilityRecords")
+        .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
+        .first();
+      rows.push({
+        _id: membership._id,
+        meetingId: membership.meetingId,
+        role: membership.role,
+        displayName: membership.displayName,
+        revokedAt: membership.revokedAt,
+        updatedAt: membership.updatedAt,
+        hasAvailability: Boolean(availability),
+        meeting: redactPublicMeeting(meeting),
+      });
+    }
+
+    const recoverableMembershipIds = new Set(
+      filterRecoverableDashboardMemberships(
+        rows.map((row) => ({
+          _id: row._id,
+          meetingId: row.meetingId,
+          role: row.role,
+          displayName: row.displayName,
+          revokedAt: row.revokedAt,
+          updatedAt: row.updatedAt,
+          hasAvailability: row.hasAvailability,
+        })),
+      ).map((membership) => membership._id),
+    );
+
+    return {
+      identity: {
+        emailIdentityId: identity._id,
+        normalizedEmail: identity.normalizedEmail,
+        verifiedAt: identity.verifiedAt,
+      },
+      memberships: rows
+        .filter((row) => recoverableMembershipIds.has(row._id))
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .map((row) => ({
+          membershipId: row._id,
+          role: row.role,
+          displayName: row.displayName,
+          hasAvailability: row.hasAvailability,
+          meeting: row.meeting,
+        })),
+    };
+  },
+});
+
+export const readVerifiedEmailIdentity = query({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const identity = await ctx.db.get(args.emailIdentityId);
+    assertVerifiedEmailIdentity(identity);
+
+    return {
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+      verifiedAt: identity.verifiedAt,
+    };
+  },
+});
+
+export const readEmailIdentitySession = query({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const identity = await ctx.db.get(args.emailIdentityId);
+    if (!identity?.verifiedAt) {
+      return { status: "stale" as const };
+    }
+
+    return {
+      status: "verified" as const,
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+      verifiedAt: identity.verifiedAt,
+    };
+  },
+});
+
+export const createRecoveredMembershipLink = mutation({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+    membershipId: v.id("memberships"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = Date.now();
+    const identity = await ctx.db.get(args.emailIdentityId);
+    assertVerifiedEmailIdentity(identity);
+    const membership = await ctx.db.get(args.membershipId);
+    if (
+      !membership ||
+      membership.revokedAt !== undefined ||
+      membership.emailIdentityId !== args.emailIdentityId
+    ) {
+      throw new Error("Membership is not recoverable for this email identity");
+    }
+    const availability = await ctx.db
+      .query("availabilityRecords")
+      .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
+      .first();
+    if (
+      !isMembershipRecoverable({
+        role: membership.role,
+        revokedAt: membership.revokedAt,
+        hasAvailability: Boolean(availability),
+      })
+    ) {
+      throw new Error("Membership is not recoverable for this email identity");
+    }
+
+    const accessToken = await createSecretToken("membership");
+    await ctx.db.insert("membershipAccessTokens", {
+      membershipId: membership._id,
+      tokenHash: accessToken.tokenHash,
+      tokenFingerprint: accessToken.tokenFingerprint,
+      tokenVersion: 1,
+      tokenCreatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await insertAuditEvent(ctx, {
+      meetingId: membership.meetingId,
+      actorMembershipId: membership._id,
+      targetMembershipId: membership._id,
+      kind: "membership.recovery_link_created",
+      metadata: {
+        tokenFingerprint: accessToken.tokenFingerprint,
+      },
+      now,
+    });
+
+    return {
+      membershipId: membership._id,
+      membershipToken: accessToken.rawToken,
+      tokenFingerprint: accessToken.tokenFingerprint,
     };
   },
 });
@@ -898,30 +1185,58 @@ async function buildResultsForMeeting(
 }
 
 async function findMembershipByToken(ctx: QueryLikeCtx, membershipToken: string) {
+  const resolved = await resolveMembershipByToken(ctx, membershipToken);
+  return resolved?.membership ?? null;
+}
+
+async function resolveMembershipByToken(ctx: QueryLikeCtx, membershipToken: string) {
   const tokenHash = await hashSecretToken(membershipToken);
   const membership = await ctx.db
     .query("memberships")
     .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
     .unique();
 
-  if (!membership || membership.revokedAt !== undefined) {
+  if (membership) {
+    if (membership.revokedAt !== undefined) {
+      return null;
+    }
+    return { membership, accessTokenId: undefined };
+  }
+
+  const accessToken = await ctx.db
+    .query("membershipAccessTokens")
+    .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+    .unique();
+  if (!accessToken || accessToken.revokedAt !== undefined) {
     return null;
   }
 
-  return membership;
+  const accessMembership = await ctx.db.get(accessToken.membershipId);
+  if (!accessMembership || accessMembership.revokedAt !== undefined) {
+    return null;
+  }
+
+  return { membership: accessMembership, accessTokenId: accessToken._id };
 }
 
 async function requireMembershipByToken(ctx: MutationLikeCtx, membershipToken: string) {
-  const membership = await findMembershipByToken(ctx, membershipToken);
-  if (!membership) {
+  const resolved = await resolveMembershipByToken(ctx, membershipToken);
+  if (!resolved) {
     throw new Error("Membership token is invalid");
   }
 
   const now = Date.now();
+  const { membership, accessTokenId } = resolved;
   await ctx.db.patch(membership._id, {
     tokenLastUsedAt: now,
     updatedAt: now,
   });
+  if (accessTokenId) {
+    await ctx.db.patch(accessTokenId, {
+      tokenLastUsedAt: now,
+      updatedAt: now,
+    });
+  }
   return membership;
 }
 
@@ -995,6 +1310,108 @@ async function validateMagicLinkTarget(
     meetingId: membership.meetingId,
     membershipId: membership._id,
   };
+}
+
+async function assertEmailVerificationRequestAllowed(
+  ctx: MutationLikeCtx,
+  emailIdentityId: Id<"emailIdentities">,
+  now: number,
+) {
+  const recentLinks = await ctx.db
+    .query("magicLinks")
+    .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", emailIdentityId))
+    .collect();
+  const cooldownStartedAt = now - EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS;
+  const hasRecentVerificationRequest = recentLinks.some(
+    (link) => link.purpose === "emailVerification" && link.createdAt > cooldownStartedAt,
+  );
+  if (hasRecentVerificationRequest) {
+    throw new Error("Please wait before requesting another verification link");
+  }
+}
+
+async function createEmailVerificationMagicLink(
+  ctx: MutationLikeCtx,
+  args: {
+    email: string;
+    displayName?: string;
+  },
+) {
+  const now = Date.now();
+  const expiresAt = normalizeMagicLinkExpiry({ now });
+  const emailIdentityId = await upsertEmailIdentity(
+    ctx,
+    args.email,
+    args.displayName,
+    now,
+  );
+  await assertEmailVerificationRequestAllowed(ctx, emailIdentityId, now);
+  const magicLinkToken = await createSecretToken("magicLink");
+  const magicLinkId = await ctx.db.insert("magicLinks", {
+    purpose: "emailVerification",
+    emailIdentityId,
+    tokenHash: magicLinkToken.tokenHash,
+    tokenFingerprint: magicLinkToken.tokenFingerprint,
+    tokenVersion: 1,
+    tokenCreatedAt: now,
+    expiresAt,
+    createdAt: now,
+  });
+
+  await ctx.db.insert("notificationOutbox", {
+    emailIdentityId,
+    kind: "magicLink.emailVerification",
+    status: "pending",
+    dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
+    payload: {
+      magicLinkId,
+      tokenFingerprint: magicLinkToken.tokenFingerprint,
+    },
+    attempts: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    magicLinkId,
+    tokenFingerprint: magicLinkToken.tokenFingerprint,
+    expiresAt,
+    deliveryQueued: true,
+    devMagicLinkToken: shouldExposeDevMagicLinkToken()
+      ? magicLinkToken.rawToken
+      : undefined,
+  };
+}
+
+function assertInternalIdentitySecret(providedSecret: string): void {
+  const expectedSecret = process.env[INTERNAL_IDENTITY_SECRET_ENV];
+  if (!expectedSecret) {
+    if (
+      isExplicitLocalDevelopmentRuntime() &&
+      process.env.MEETING_SCHEDULER_ALLOW_DEV_IDENTITY_SECRET === "true" &&
+      providedSecret === DEV_INTERNAL_IDENTITY_SECRET
+    ) {
+      return;
+    }
+    throw new Error(`${INTERNAL_IDENTITY_SECRET_ENV} is required`);
+  }
+  if (providedSecret !== expectedSecret) {
+    throw new Error("Internal identity authorization failed");
+  }
+}
+
+function shouldExposeDevMagicLinkToken(): boolean {
+  return (
+    isExplicitLocalDevelopmentRuntime() &&
+    process.env.MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS === "true"
+  );
+}
+
+function isExplicitLocalDevelopmentRuntime(): boolean {
+  return (
+    process.env.NODE_ENV === "development" ||
+    process.env.CONVEX_DEPLOYMENT?.startsWith("dev:") === true
+  );
 }
 
 async function replaceAllowedTimeRanges(
@@ -1271,10 +1688,12 @@ function redactPublicMeeting(meeting: {
 }
 
 function redactParticipantMembership(membership: {
+  emailIdentityId?: Id<"emailIdentities">;
   displayName?: string;
   role: MembershipRole;
 }) {
   return {
+    hasEmailIdentity: Boolean(membership.emailIdentityId),
     displayName: membership.displayName,
     role: membership.role,
   };
