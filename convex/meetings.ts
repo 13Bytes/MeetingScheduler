@@ -1029,6 +1029,27 @@ export const readVerifiedEmailIdentity = query({
   },
 });
 
+export const readEmailIdentitySession = query({
+  args: {
+    internalSecret: v.string(),
+    emailIdentityId: v.id("emailIdentities"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const identity = await ctx.db.get(args.emailIdentityId);
+    if (!identity?.verifiedAt) {
+      return { status: "stale" as const };
+    }
+
+    return {
+      status: "verified" as const,
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+      verifiedAt: identity.verifiedAt,
+    };
+  },
+});
+
 export const createRecoveredMembershipLink = mutation({
   args: {
     internalSecret: v.string(),

@@ -5,6 +5,7 @@ import { MembershipIdentityPanel } from "@/components/membership-identity-panel"
 describe("MembershipIdentityPanel", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("switches to attached state after attaching a verified session", async () => {
