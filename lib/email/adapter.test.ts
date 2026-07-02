@@ -8,6 +8,7 @@ import {
 
 describe("email delivery adapter", () => {
   afterEach(() => {
+    vi.useRealTimers();
     clearLocalDeliveredEmails();
     vi.restoreAllMocks();
   });
@@ -95,5 +96,39 @@ describe("email delivery adapter", () => {
         { idempotencyKey: "notification:1" },
       ),
     ).rejects.toThrow(/must match EMAIL_FROM/i);
+  });
+
+  it("times out Resend requests that do not complete", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+    const adapter = createEmailDeliveryAdapter(
+      {
+        MEETING_SCHEDULER_EMAIL_PROVIDER: "resend",
+        EMAIL_FROM: "Meetings <meetings@example.com>",
+        RESEND_API_KEY: "test-key",
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    const sendPromise = adapter.send(
+      {
+        to: "ada@example.com",
+        from: "Meetings <meetings@example.com>",
+        subject: "Hello",
+        text: "Body",
+      },
+      { idempotencyKey: "notification:1" },
+    );
+    const expectation = expect(sendPromise).rejects.toThrow(/timed out/i);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expectation;
   });
 });

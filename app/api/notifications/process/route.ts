@@ -39,37 +39,29 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
+    if (!isLifecycleNotificationKind(claim.notification.kind)) {
+      results.push({ notificationId, status: "skipped" });
+      continue;
+    }
+    const { meetingUrl, dashboardUrl } = buildLifecycleEmailUrls({
+      appOrigin,
+      meetingSlug: claim.meeting.slug,
+    });
+    let delivery;
     try {
-      if (!isLifecycleNotificationKind(claim.notification.kind)) {
-        results.push({ notificationId, status: "skipped" });
-        continue;
-      }
-      const { meetingUrl, dashboardUrl } = buildLifecycleEmailUrls({
-        appOrigin,
-        meetingSlug: claim.meeting.slug,
+      const message = renderMeetingLifecycleEmail({
+        kind: claim.notification.kind,
+        to: claim.recipient.normalizedEmail,
+        from: getConfiguredEmailFrom(),
+        meetingTitle: claim.meeting.title,
+        meetingUrl,
+        dashboardUrl,
+        finalizedSlot: getFinalizedSlotForEmail(claim.notification),
       });
-      const delivery = await adapter.send(
-        renderMeetingLifecycleEmail({
-          kind: claim.notification.kind,
-          to: claim.recipient.normalizedEmail,
-          from: getConfiguredEmailFrom(),
-          meetingTitle: claim.meeting.title,
-          meetingUrl,
-          dashboardUrl,
-          finalizedSlot: getFinalizedSlotForEmail(claim.notification),
-        }),
-        {
-          idempotencyKey:
-            claim.notification.dedupeKey ?? `notification:${claim.notification._id}`,
-        },
-      );
-      await convex.mutation(api.meetings.markNotificationSent, {
-        internalSecret,
-        notificationId: claim.notification._id,
-        provider: delivery.provider,
-        providerMessageId: delivery.providerMessageId,
+      delivery = await adapter.send(message, {
+        idempotencyKey:
+          claim.notification.dedupeKey ?? `notification:${claim.notification._id}`,
       });
-      results.push({ notificationId, status: "sent" });
     } catch (caughtError) {
       const retryAt = getNotificationRetryAt({
         attempts: claim.notification.attempts,
@@ -82,7 +74,16 @@ export async function POST(request: NextRequest) {
         retryAt,
       });
       results.push({ notificationId, status: "failed", retryAt });
+      continue;
     }
+
+    await convex.mutation(api.meetings.markNotificationSent, {
+      internalSecret,
+      notificationId: claim.notification._id,
+      provider: delivery.provider,
+      providerMessageId: delivery.providerMessageId,
+    });
+    results.push({ notificationId, status: "sent" });
   }
 
   return NextResponse.json({
@@ -115,7 +116,7 @@ function authorizeProcessor(request: NextRequest) {
 function getAppOrigin(request: NextRequest): string {
   const configuredOrigin = process.env.MEETING_SCHEDULER_APP_URL;
   if (configuredOrigin) {
-    return configuredOrigin;
+    return new URL(configuredOrigin).origin;
   }
   if (process.env.NODE_ENV === "production") {
     throw new Error("MEETING_SCHEDULER_APP_URL is required");

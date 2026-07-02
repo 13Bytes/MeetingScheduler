@@ -41,8 +41,9 @@ export async function POST(request: Request) {
       : undefined;
     const adapter = createEmailDeliveryAdapter();
 
+    let delivery;
     try {
-      const delivery = await adapter.send(
+      delivery = await adapter.send(
         renderPasswordlessEmail({
           purpose: "emailVerification",
           to: result.normalizedEmail,
@@ -54,12 +55,6 @@ export async function POST(request: Request) {
           idempotencyKey: `notification:${result.notificationOutboxId}:${result.tokenFingerprint}`,
         },
       );
-      await convex.mutation(api.meetings.markNotificationSent, {
-        internalSecret: getInternalIdentitySecret(),
-        notificationId: result.notificationOutboxId,
-        provider: delivery.provider,
-        providerMessageId: delivery.providerMessageId,
-      });
     } catch (deliveryError) {
       await convex.mutation(api.meetings.markNotificationFailed, {
         internalSecret: getInternalIdentitySecret(),
@@ -68,6 +63,12 @@ export async function POST(request: Request) {
       });
       throw deliveryError;
     }
+    await convex.mutation(api.meetings.markNotificationSent, {
+      internalSecret: getInternalIdentitySecret(),
+      notificationId: result.notificationOutboxId,
+      provider: delivery.provider,
+      providerMessageId: delivery.providerMessageId,
+    });
 
     return NextResponse.json({
       deliveryQueued: result.deliveryQueued,
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
 function getAppOrigin(request: Request): string {
   const configuredOrigin = process.env.MEETING_SCHEDULER_APP_URL;
   if (configuredOrigin) {
-    return configuredOrigin;
+    return new URL(configuredOrigin).origin;
   }
   if (process.env.NODE_ENV === "production") {
     throw new Error("MEETING_SCHEDULER_APP_URL is required");

@@ -628,13 +628,14 @@ export const createMagicLink = mutation({
       membershipId: recoveryTarget.membershipId,
       emailIdentityId,
       kind: `magicLink.${args.purpose}`,
-      status: "queued",
+      status: "cancelled",
       dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
       payload: {
         magicLinkId,
         tokenFingerprint: magicLinkToken.tokenFingerprint,
       },
       attempts: 0,
+      lastError: "Magic link delivery requires the server email adapter route",
       createdAt: now,
       updatedAt: now,
     });
@@ -645,7 +646,7 @@ export const createMagicLink = mutation({
       devMagicLinkToken: shouldExposeDevMagicLinkToken()
         ? magicLinkToken.rawToken
         : undefined,
-      deliveryQueued: true,
+      deliveryQueued: false,
     };
   },
 });
@@ -675,6 +676,7 @@ export const requestEmailVerificationForDelivery = mutation({
       email: args.email,
       displayName: args.displayName,
       exposeRawToken: true,
+      queueForDelivery: true,
     });
   },
 });
@@ -1552,7 +1554,7 @@ async function wasMagicLinkDeliveryTerminallyFailed(
     .query("notificationOutbox")
     .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", `magicLink:${tokenFingerprint}`))
     .unique();
-  return notification?.status === "failed" || notification?.status === "cancelled";
+  return notification?.status === "failed";
 }
 
 async function createEmailVerificationMagicLink(
@@ -1561,6 +1563,7 @@ async function createEmailVerificationMagicLink(
     email: string;
     displayName?: string;
     exposeRawToken?: boolean;
+    queueForDelivery?: boolean;
   },
 ) {
   const now = Date.now();
@@ -1585,16 +1588,20 @@ async function createEmailVerificationMagicLink(
     createdAt: now,
   });
 
+  const deliveryQueued = args.queueForDelivery === true;
   const notificationOutboxId = await ctx.db.insert("notificationOutbox", {
     emailIdentityId,
     kind: "magicLink.emailVerification",
-    status: "queued",
+    status: deliveryQueued ? "queued" : "cancelled",
     dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
     payload: {
       magicLinkId,
       tokenFingerprint: magicLinkToken.tokenFingerprint,
     },
     attempts: 0,
+    lastError: deliveryQueued
+      ? undefined
+      : "Magic link delivery requires the server email adapter route",
     createdAt: now,
     updatedAt: now,
   });
@@ -1605,7 +1612,7 @@ async function createEmailVerificationMagicLink(
     normalizedEmail,
     tokenFingerprint: magicLinkToken.tokenFingerprint,
     expiresAt,
-    deliveryQueued: true,
+    deliveryQueued,
     rawMagicLinkToken: args.exposeRawToken ? magicLinkToken.rawToken : undefined,
     devMagicLinkToken: shouldExposeDevMagicLinkToken()
       ? magicLinkToken.rawToken

@@ -139,4 +139,38 @@ describe("notification outbox processor route", () => {
       expect.objectContaining({ limit: 20 }),
     );
   });
+
+  it("does not mark delivery failed when sent-status recording fails", async () => {
+    process.env.MEETING_SCHEDULER_APP_URL = "https://app.example.com";
+    queryMock.mockResolvedValueOnce({ notificationIds: ["notification-1"] });
+    mutationMock
+      .mockResolvedValueOnce({
+        status: "claimed",
+        notification: {
+          _id: "notification-1",
+          kind: "meeting.reopened",
+          dedupeKey: "meeting.reopened:meeting-1:3:email-1",
+          attempts: 1,
+          payload: {},
+        },
+        meeting: { title: "Research Sync", slug: "research-sync" },
+        recipient: { normalizedEmail: "ada@example.com" },
+      })
+      .mockRejectedValueOnce(new Error("mark sent failed"));
+    sendMock.mockResolvedValueOnce({
+      provider: "development",
+      providerMessageId: "dev_123",
+    });
+
+    await expect(
+      POST(
+        new NextRequest("https://localhost/api/notifications/process", {
+          method: "POST",
+        }),
+      ),
+    ).rejects.toThrow(/mark sent failed/);
+
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(mutationMock).toHaveBeenCalledTimes(2);
+  });
 });

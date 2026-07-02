@@ -58,4 +58,16 @@ describe("email templates", () => {
       dashboardUrl: "https://app.example.com/identity/dashboard",
     });
   });
+
+  it("escapes HTML-sensitive content in lifecycle messages", () => {
+    const email = renderMeetingLifecycleEmail({
+      kind: "meeting.reopened",
+      to: "ada@example.com",
+      meetingTitle: "A <B>",
+      meetingUrl: "https://app.example.com/m/a?x='`",
+      dashboardUrl: "https://app.example.com/identity/dashboard",
+    });
+
+    expect(email.html).toContain("x=&#39;&#96;");
+  });
 });

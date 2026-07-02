@@ -36,6 +36,7 @@ type EmailEnv = {
 type FetchLike = typeof fetch;
 
 export const defaultDevelopmentEmailFrom = "Meeting Scheduler <dev@example.invalid>";
+const resendRequestTimeoutMs = 10_000;
 
 const localDeliveries: (EmailMessage & {
   idempotencyKey: string;
@@ -124,21 +125,34 @@ function createResendAdapter(env: EmailEnv, fetchImpl: FetchLike): EmailDelivery
       if (message.from !== from) {
         throw new Error("EmailMessage.from must match EMAIL_FROM for Resend delivery");
       }
-      const response = await fetchImpl("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "Idempotency-Key": options.idempotencyKey,
-        },
-        body: JSON.stringify({
-          from: message.from,
-          to: message.to,
-          subject: message.subject,
-          text: message.text,
-          ...(message.html ? { html: message.html } : {}),
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), resendRequestTimeoutMs);
+      let response: Response;
+      try {
+        response = await fetchImpl("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": options.idempotencyKey,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            from: message.from,
+            to: message.to,
+            subject: message.subject,
+            text: message.text,
+            ...(message.html ? { html: message.html } : {}),
+          }),
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new Error("Resend email request timed out");
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const body = (await response.json().catch(() => ({}))) as {
         id?: string;
         message?: string;

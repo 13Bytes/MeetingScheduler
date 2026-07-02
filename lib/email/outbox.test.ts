@@ -10,6 +10,10 @@ describe("notification outbox helpers", () => {
 
   it("normalizes delivery errors for status storage", () => {
     expect(normalizeDeliveryError(new Error("provider down"))).toBe("provider down");
-    expect(normalizeDeliveryError("nope")).toBe("Email delivery failed");
+    expect(normalizeDeliveryError("provider string")).toBe("provider string");
+    expect(normalizeDeliveryError({ message: "provider object" })).toBe(
+      "provider object",
+    );
+    expect(normalizeDeliveryError("x".repeat(600))).toHaveLength(500);
   });
 });
