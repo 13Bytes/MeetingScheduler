@@ -29,6 +29,7 @@ vi.mock("@/lib/email/adapter", () => ({
 
 describe("identity verification email request route", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     mutationMock.mockReset();
     sendMock.mockReset();
     delete process.env.MEETING_SCHEDULER_APP_URL;
@@ -83,5 +84,22 @@ describe("identity verification email request route", () => {
         providerMessageId: "dev_123",
       }),
     );
+  });
+
+  it("requires an explicit app URL before minting production magic links", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    const response = await POST(
+      new Request("https://attacker.example.net/api/identity/request", {
+        method: "POST",
+        body: JSON.stringify({ email: "ada@example.com" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toMatch(/MEETING_SCHEDULER_APP_URL is required/);
+    expect(mutationMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 });

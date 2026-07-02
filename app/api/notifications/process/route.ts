@@ -117,6 +117,9 @@ function getAppOrigin(request: NextRequest): string {
   if (configuredOrigin) {
     return configuredOrigin;
   }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("MEETING_SCHEDULER_APP_URL is required");
+  }
   return new URL(request.url).origin;
 }
 

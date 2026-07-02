@@ -121,6 +121,9 @@ function createResendAdapter(env: EmailEnv, fetchImpl: FetchLike): EmailDelivery
   return {
     provider: "resend",
     async send(message, options) {
+      if (message.from !== from) {
+        throw new Error("EmailMessage.from must match EMAIL_FROM for Resend delivery");
+      }
       const response = await fetchImpl("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -129,7 +132,7 @@ function createResendAdapter(env: EmailEnv, fetchImpl: FetchLike): EmailDelivery
           "Idempotency-Key": options.idempotencyKey,
         },
         body: JSON.stringify({
-          from,
+          from: message.from,
           to: message.to,
           subject: message.subject,
           text: message.text,

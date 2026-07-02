@@ -696,10 +696,11 @@ export const listQueuedEmailNotifications = query({
       if (notificationIds.length >= limit) {
         break;
       }
+      const remaining = limit - notificationIds.length;
       const notifications = await ctx.db
         .query("notificationOutbox")
         .withIndex("by_status", (q) => q.eq("status", status))
-        .take(limit);
+        .take(remaining);
       for (const notification of notifications) {
         if (
           notificationIds.length < limit &&
@@ -1764,13 +1765,13 @@ async function insertNotificationPlaceholdersForMeeting(
         ),
     ),
   );
-  const emailIdentities = [];
-  for (const emailIdentityId of emailIdentityIds) {
-    const identity = await ctx.db.get(emailIdentityId);
-    if (identity) {
-      emailIdentities.push(identity);
-    }
-  }
+  const loadedEmailIdentities = await Promise.all(
+    emailIdentityIds.map((emailIdentityId) => ctx.db.get(emailIdentityId)),
+  );
+  const emailIdentities = loadedEmailIdentities.filter(
+    (identity): identity is NonNullable<(typeof loadedEmailIdentities)[number]> =>
+      identity !== null,
+  );
   const placeholders = buildLifecycleNotificationPlaceholders({
     meetingId: args.meetingId,
     memberships,

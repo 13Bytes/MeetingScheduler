@@ -32,6 +32,7 @@ vi.mock("@/lib/email/adapter", () => ({
 
 describe("notification outbox processor route", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     queryMock.mockReset();
     mutationMock.mockReset();
     sendMock.mockReset();
@@ -106,5 +107,36 @@ describe("notification outbox processor route", () => {
 
     expect(response.status).toBe(401);
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("requires an explicit app URL for production lifecycle links", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.MEETING_SCHEDULER_NOTIFICATION_PROCESS_SECRET = "secret";
+
+    await expect(
+      POST(
+        new NextRequest("https://attacker.example.net/api/notifications/process", {
+          method: "POST",
+          headers: { authorization: "Bearer secret" },
+        }),
+      ),
+    ).rejects.toThrow(/MEETING_SCHEDULER_APP_URL is required/);
+    expect(queryMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes invalid processor limits before querying Convex", async () => {
+    queryMock.mockResolvedValueOnce({ notificationIds: [] });
+
+    await POST(
+      new NextRequest("https://localhost/api/notifications/process?limit=abc", {
+        method: "POST",
+      }),
+    );
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ limit: 20 }),
+    );
   });
 });

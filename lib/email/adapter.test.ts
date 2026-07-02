@@ -73,4 +73,27 @@ describe("email delivery adapter", () => {
       }),
     );
   });
+
+  it("rejects Resend messages whose from address diverges from EMAIL_FROM", async () => {
+    const adapter = createEmailDeliveryAdapter(
+      {
+        MEETING_SCHEDULER_EMAIL_PROVIDER: "resend",
+        EMAIL_FROM: "Meetings <meetings@example.com>",
+        RESEND_API_KEY: "test-key",
+      },
+      vi.fn() as typeof fetch,
+    );
+
+    await expect(
+      adapter.send(
+        {
+          to: "ada@example.com",
+          from: "Other <other@example.com>",
+          subject: "Hello",
+          text: "Body",
+        },
+        { idempotencyKey: "notification:1" },
+      ),
+    ).rejects.toThrow(/must match EMAIL_FROM/i);
+  });
 });

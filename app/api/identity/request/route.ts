@@ -16,6 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
 
+    const origin = getAppOrigin(request);
     const convex = new ConvexHttpClient(getConvexUrl());
     const result = await convex.mutation(
       api.meetings.requestEmailVerificationForDelivery,
@@ -28,7 +29,6 @@ export async function POST(request: Request) {
     if (!result.rawMagicLinkToken) {
       throw new Error("Unable to prepare verification email.");
     }
-    const origin = getAppOrigin(request);
     const magicLinkUrl = new URL(
       `/identity/verify?token=${encodeURIComponent(result.rawMagicLinkToken)}`,
       origin,
@@ -89,5 +89,12 @@ export async function POST(request: Request) {
 }
 
 function getAppOrigin(request: Request): string {
-  return process.env.MEETING_SCHEDULER_APP_URL ?? new URL(request.url).origin;
+  const configuredOrigin = process.env.MEETING_SCHEDULER_APP_URL;
+  if (configuredOrigin) {
+    return configuredOrigin;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("MEETING_SCHEDULER_APP_URL is required");
+  }
+  return new URL(request.url).origin;
 }
