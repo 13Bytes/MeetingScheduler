@@ -391,6 +391,18 @@ export function slugifyMeetingTitle(title: string): string {
   return slug || "meeting";
 }
 
+export function buildGeneratedMeetingSlug({
+  title,
+  tokenFingerprint,
+}: {
+  title: string;
+  tokenFingerprint: string;
+}): string {
+  const slugBase = slugifyMeetingTitle(title);
+  const slugSuffix = slugifyMeetingTitle(tokenFingerprint).replace(/-/g, "").slice(0, 6);
+  return `${slugBase}-${slugSuffix || "poll"}`;
+}
+
 export function normalizeEmailAddress(email: string): string {
   const normalized = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)) {

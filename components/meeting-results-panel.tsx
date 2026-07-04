@@ -43,7 +43,10 @@ export function MeetingResultsPanel({
   onReopen?: () => Promise<unknown>;
 }) {
   const hasParticipants = results.totalParticipantCount > 0;
+  const hasVotes = results.availabilityCount > 0;
   const hasCandidates = results.candidateCount > 0;
+  const shouldShowShortlist = hasVotes && !selectedSlot;
+  const shouldShowWaitingState = hasParticipants && !hasVotes && !selectedSlot;
   const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{
     tone: "error" | "success";
@@ -120,155 +123,182 @@ export function MeetingResultsPanel({
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <CardHeader className="border-b border-border">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="space-y-2">
-                <CardTitle className="flex items-center gap-2">
-                  <CalendarCheck2 className="size-5 text-primary" aria-hidden="true" />
-                  Recommended Shortlist
-                </CardTitle>
-                <p className="text-sm leading-6 text-slate-600">
-                  Ranked by attendees first, then fewer reluctant cells, then earliest
-                  start.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {canAdminister ? <Badge variant="accent">Admin view</Badge> : null}
-                {!results.detailsVisible ? (
-                  <Badge>
-                    <EyeOff className="size-3.5" aria-hidden="true" />
-                    Summary only
-                  </Badge>
-                ) : (
-                  <Badge>Detailed</Badge>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-5">
-            {!hasParticipants ? (
-              <EmptyResultsMessage message="No participants have joined yet. Recommendations will update as people save responses." />
-            ) : null}
-            {hasParticipants && !hasCandidates ? (
-              <EmptyResultsMessage message="No candidate slots fit inside the current admin-allowed ranges." />
-            ) : null}
-            {results.shortlist.map((candidate) => (
-              <CandidateRow
-                key={`${candidate.startUtc}_${candidate.endUtc}`}
-                candidate={candidate}
-                timeZone={results.timeZone}
-                showDetails={results.detailsVisible}
-                canSelect={canFinalize && lifecycleState === "open"}
-                isSelected={
-                  canFinalize &&
-                  lifecycleState === "open" &&
-                  candidateKey(candidate) === activeCandidateKey
-                }
-                onSelect={() => setSelectedCandidateKey(candidateKey(candidate))}
-              />
-            ))}
-          </CardContent>
-        </Card>
-
-        <aside className="space-y-4">
-          {canAdminister &&
-          (canFinalize || canReopen || lifecycleState === "finalized") ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Final Selection</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {lifecycleState === "finalized" ? (
-                  <p className="text-sm leading-6 text-slate-600">
-                    This poll is finalized. Results remain visible, and editing stays
-                    locked until an admin reopens it.
-                  </p>
-                ) : hasCandidates ? (
-                  <>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-medium text-foreground">
-                        Override candidate
-                      </span>
-                      <select
-                        className={inputClassName}
-                        value={activeCandidateKey ?? ""}
-                        onChange={(event) => setSelectedCandidateKey(event.target.value)}
-                        disabled={!canFinalize || isSubmitting}
-                        aria-label="Override final slot"
-                      >
-                        {results.candidates.map((candidate) => (
-                          <option
-                            key={candidateKey(candidate)}
-                            value={candidateKey(candidate)}
-                          >
-                            #{candidate.rank}{" "}
-                            {formatCandidateWindow(candidate, results.timeZone)} ·{" "}
-                            {candidate.availableParticipantCount}/
-                            {candidate.totalParticipantCount} able
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {selectedCandidate ? (
-                      <FinalConfirmation
-                        candidate={selectedCandidate}
-                        timeZone={results.timeZone}
-                        durationMinutes={results.durationMinutes}
-                      />
-                    ) : null}
-                    <Button
-                      type="button"
-                      className="w-full"
-                      disabled={!canFinalize || !selectedCandidate || isSubmitting}
-                      onClick={handleFinalize}
-                    >
-                      {isSubmitting ? (
-                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <CheckCircle2 className="size-4" aria-hidden="true" />
-                      )}
-                      Finalize selected time
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-sm leading-6 text-slate-600">
-                    Add admin-allowed ranges before finalizing a meeting time.
-                  </p>
-                )}
-                {status ? (
-                  <StatusMessage tone={status.tone}>{status.message}</StatusMessage>
-                ) : null}
-              </CardContent>
-            </Card>
-          ) : null}
-
+        {shouldShowShortlist ? (
           <Card>
-            <CardHeader>
-              <CardTitle>Score Heatmap</CardTitle>
+            <CardHeader className="border-b border-border">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarCheck2 className="size-5 text-primary" aria-hidden="true" />
+                    Recommended Shortlist
+                  </CardTitle>
+                  <p className="text-sm leading-6 text-slate-600">
+                    Ranked by attendees first, then fewer reluctant cells, then earliest
+                    start.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {canAdminister ? <Badge variant="accent">Admin view</Badge> : null}
+                  {!results.detailsVisible ? (
+                    <Badge>
+                      <EyeOff className="size-3.5" aria-hidden="true" />
+                      Summary only
+                    </Badge>
+                  ) : (
+                    <Badge>Detailed</Badge>
+                  )}
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {results.candidates.slice(0, 12).map((candidate) => (
-                <HeatmapBar
+            <CardContent className="space-y-4 pt-5">
+              {hasParticipants && !hasCandidates ? (
+                <EmptyResultsMessage message="No candidate slots fit inside the current admin-allowed ranges." />
+              ) : null}
+              {results.shortlist.map((candidate) => (
+                <CandidateRow
                   key={`${candidate.startUtc}_${candidate.endUtc}`}
                   candidate={candidate}
                   timeZone={results.timeZone}
+                  showDetails={results.detailsVisible}
+                  canSelect={canFinalize && lifecycleState === "open"}
+                  isSelected={
+                    canFinalize &&
+                    lifecycleState === "open" &&
+                    candidateKey(candidate) === activeCandidateKey
+                  }
+                  onSelect={() => setSelectedCandidateKey(candidateKey(candidate))}
                 />
               ))}
-              {results.candidates.length > 12 ? (
-                <p className="text-xs leading-5 text-slate-500">
-                  Showing the strongest 12 of {results.candidates.length} candidate slots.
-                </p>
-              ) : null}
-              {hasParticipants && hasCandidates ? null : (
-                <p className="text-sm leading-6 text-slate-600">
-                  The heatmap appears once there are participants and valid candidate
-                  slots.
-                </p>
-              )}
             </CardContent>
           </Card>
-        </aside>
+        ) : shouldShowWaitingState ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Results Pending</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyResultsMessage message="Recommendations will appear after someone saves availability." />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {hasVotes ? (
+          <aside className="space-y-4">
+            {canAdminister &&
+            (canFinalize || canReopen || lifecycleState === "finalized") ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Final Selection</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {lifecycleState === "finalized" ? (
+                    <p className="text-sm leading-6 text-slate-600">
+                      This poll is finalized. Results remain visible, and editing stays
+                      locked until an admin reopens it.
+                    </p>
+                  ) : hasCandidates ? (
+                    <>
+                      <label className="grid gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          Override candidate
+                        </span>
+                        <select
+                          className={inputClassName}
+                          value={activeCandidateKey ?? ""}
+                          onChange={(event) =>
+                            setSelectedCandidateKey(event.target.value)
+                          }
+                          disabled={!canFinalize || isSubmitting}
+                          aria-label="Override final slot"
+                        >
+                          {results.candidates.map((candidate) => (
+                            <option
+                              key={candidateKey(candidate)}
+                              value={candidateKey(candidate)}
+                            >
+                              #{candidate.rank}{" "}
+                              {formatCandidateWindow(candidate, results.timeZone)} ·{" "}
+                              {candidate.availableParticipantCount}/
+                              {candidate.totalParticipantCount} able
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {selectedCandidate ? (
+                        <FinalConfirmation
+                          candidate={selectedCandidate}
+                          timeZone={results.timeZone}
+                          durationMinutes={results.durationMinutes}
+                        />
+                      ) : null}
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={!canFinalize || !selectedCandidate || isSubmitting}
+                        onClick={handleFinalize}
+                      >
+                        {isSubmitting ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <CheckCircle2 className="size-4" aria-hidden="true" />
+                        )}
+                        Finalize selected time
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm leading-6 text-slate-600">
+                      Add admin-allowed ranges before finalizing a meeting time.
+                    </p>
+                  )}
+                  {status ? (
+                    <StatusMessage tone={status.tone}>{status.message}</StatusMessage>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Score Heatmap</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {results.candidates.slice(0, 12).map((candidate) => (
+                  <HeatmapBar
+                    key={`${candidate.startUtc}_${candidate.endUtc}`}
+                    candidate={candidate}
+                    timeZone={results.timeZone}
+                  />
+                ))}
+                {results.candidates.length > 12 ? (
+                  <p className="text-xs leading-5 text-slate-500">
+                    Showing the strongest 12 of {results.candidates.length} candidate
+                    slots.
+                  </p>
+                ) : null}
+                {hasParticipants && hasCandidates ? null : (
+                  <p className="text-sm leading-6 text-slate-600">
+                    The heatmap appears once there are participants and valid candidate
+                    slots.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </aside>
+        ) : shouldShowWaitingState ? (
+          <aside className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Awaiting Availability</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-6 text-slate-600">
+                  Final selection and score heatmap will appear after someone saves
+                  availability.
+                </p>
+              </CardContent>
+            </Card>
+          </aside>
+        ) : null}
       </div>
     </section>
   );

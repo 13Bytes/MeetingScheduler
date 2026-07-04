@@ -44,11 +44,23 @@ export function buildLifecycleNotificationPlaceholders<
     emailIdentityId?: EmailIdentityId;
     revokedAt?: number;
   }[];
+  emailIdentities: {
+    _id: EmailIdentityId;
+    normalizedEmail: string;
+    verifiedAt?: number;
+  }[];
   kind: "meeting.finalized" | "meeting.reopened";
   lifecycleRevision: number;
   payload: Record<string, string | number | boolean | null>;
   now: number;
 }) {
+  const verifiedIdentityIds = new Set(
+    args.emailIdentities
+      .filter((identity) => identity.verifiedAt !== undefined)
+      .map((identity) => identity._id),
+  );
+  const seenIdentityIds = new Set<EmailIdentityId>();
+
   return args.memberships
     .filter((membership) => membership.revokedAt === undefined)
     .filter(
@@ -57,15 +69,24 @@ export function buildLifecycleNotificationPlaceholders<
       ): membership is {
         _id: MembershipId;
         emailIdentityId: EmailIdentityId;
-      } => membership.emailIdentityId !== undefined,
+      } =>
+        membership.emailIdentityId !== undefined &&
+        verifiedIdentityIds.has(membership.emailIdentityId),
     )
+    .filter((membership) => {
+      if (seenIdentityIds.has(membership.emailIdentityId)) {
+        return false;
+      }
+      seenIdentityIds.add(membership.emailIdentityId);
+      return true;
+    })
     .map((membership) => ({
       meetingId: args.meetingId,
       membershipId: membership._id,
       emailIdentityId: membership.emailIdentityId,
       kind: args.kind,
-      status: "pending" as const,
-      dedupeKey: `${args.kind}:${args.meetingId}:${args.lifecycleRevision}:${membership._id}`,
+      status: "queued" as const,
+      dedupeKey: `${args.kind}:${args.meetingId}:${args.lifecycleRevision}:${membership.emailIdentityId}`,
       payload: {
         ...args.payload,
         lifecycleRevision: args.lifecycleRevision,
@@ -74,4 +95,28 @@ export function buildLifecycleNotificationPlaceholders<
       createdAt: args.now,
       updatedAt: args.now,
     }));
+}
+
+export function shouldAttemptNotificationDelivery(args: {
+  status: "queued" | "sending" | "pending" | "sent" | "failed" | "cancelled";
+  scheduledFor?: number;
+  attempts: number;
+  now: number;
+  maxAttempts: number;
+}) {
+  if (args.status === "sent" || args.status === "cancelled") {
+    return false;
+  }
+  if (args.attempts >= args.maxAttempts) {
+    return false;
+  }
+  if (args.scheduledFor !== undefined && args.scheduledFor > args.now) {
+    return false;
+  }
+  return (
+    args.status === "queued" ||
+    args.status === "pending" ||
+    args.status === "failed" ||
+    args.status === "sending"
+  );
 }

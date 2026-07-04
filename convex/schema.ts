@@ -128,8 +128,11 @@ export default defineSchema({
     dedupeKey: v.optional(v.string()),
     payload: metadataValidator,
     attempts: v.number(),
+    provider: v.optional(v.string()),
+    providerMessageId: v.optional(v.string()),
     lastError: v.optional(v.string()),
     scheduledFor: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

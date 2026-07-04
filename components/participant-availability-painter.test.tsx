@@ -35,6 +35,7 @@ const results: MeetingResults = {
   granularityMinutes: 30,
   durationMinutes: 60,
   totalParticipantCount: 1,
+  availabilityCount: 2,
   candidateCount: 1,
   detailsVisible: false,
   candidates: [

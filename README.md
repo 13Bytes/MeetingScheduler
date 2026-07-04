@@ -1,11 +1,11 @@
 # Meeting Scheduler
 
-A Stage 7 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 8 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
 backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
 meeting creation flow, an admin calendar constraint painter, and participant
 availability painting with live result recommendations, admin finalization, and
-optional passwordless email recovery.
+optional passwordless email recovery, and transactional email notifications.
 
 ## Stack
 
@@ -24,7 +24,8 @@ join/return flow for painting yes, reluctant, no, or unset availability over
 admin-allowed cells. Stage 5 adds realtime candidate scoring, recommendation
 ranking, and privacy-aware result display. Stage 6 adds admin final selection,
 selected-slot display, and reopening. Stage 7 adds optional passwordless email
-identity for recovery.
+identity for recovery. Stage 8 adds transactional email delivery for
+passwordless verification and meeting lifecycle notifications.
 
 Core Convex tables:
 
@@ -41,7 +42,8 @@ Core Convex tables:
 - `emailIdentities`: optional passwordless identity records normalized by email.
 - `magicLinks`: hashed verification or recovery tokens with expiry and consume
   timestamps.
-- `notificationOutbox`: placeholder outbox for later email delivery.
+- `notificationOutbox`: retryable email delivery records with dedupe keys,
+  attempts, provider status, sent timestamps, and delivery errors.
 - `auditEvents`: append-only domain events for lifecycle and membership changes.
 
 Key invariants:
@@ -51,9 +53,9 @@ Key invariants:
 - Admin is a membership role. Multiple admins are allowed.
 - Meetings can enable `everyoneAdmin`, where any active member can administer.
 - Secret membership tokens are returned only at creation time. Magic-link issue
-  requests queue a notification placeholder and return only a fingerprint unless
-  local development explicitly enables dev magic-link exposure. Convex stores
-  SHA-256 hashes plus hash-derived fingerprints, never raw tokens.
+  requests send through the server email adapter and return only a fingerprint
+  unless local development explicitly enables dev magic-link exposure. Convex
+  stores SHA-256 hashes plus hash-derived fingerprints, never raw tokens.
 - Email identity is optional. A verified email can attach to memberships for
   recovery, but it does not replace memberships and is never required to create
   or answer a poll.
@@ -127,11 +129,13 @@ once. Existing secret membership links remain valid and independent of email
 login. Unverified email addresses never unlock dashboard rows or membership
 actions.
 
-Real email delivery is still deferred. Magic-link requests queue
-`notificationOutbox` rows containing only non-secret metadata. For local
-development only, set `MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true` in the
-Convex runtime to let the request API return a clickable dev magic link. Do not
-enable that flag in production.
+Magic-link requests create `notificationOutbox` rows containing only non-secret
+metadata, then the Next.js route sends the raw link immediately through the
+configured email adapter. The raw magic-link token is not stored in Convex or in
+the outbox payload. For local development only, set
+`MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true` in the Convex runtime to let the
+request API return a clickable dev magic link. Do not enable that flag in
+production.
 
 ## Admin Calendar Constraint Painter
 
@@ -228,9 +232,12 @@ joining, and admin constraint painting are disabled until an admin uses
 final slot, records reopen metadata/audit events, and preserves existing
 availability and settings for continued editing.
 
-When finalized or reopened, Convex queues placeholder `notificationOutbox`
-records for active memberships with email identities. These are intentionally
-not delivered yet; real email delivery and AI-agent APIs remain deferred.
+When finalized or reopened, Convex queues `notificationOutbox` records only for
+active memberships attached to verified email identities. The dedupe key is
+scoped to the meeting, lifecycle revision, event kind, and email identity, so one
+verified recipient is not emailed twice for the same logical lifecycle event.
+Call `POST /api/notifications/process` to claim queued rows and deliver them
+through the configured email adapter. AI-agent APIs remain deferred.
 
 ## Environment
 
@@ -251,6 +258,15 @@ Required for Convex-backed features:
   cookies in production. Local development falls back to a dev-only secret.
 - `MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET` shared by Next server routes and
   Convex for email dashboard/attach/recover operations in production.
+- `EMAIL_FROM` for production email delivery.
+- `MEETING_SCHEDULER_EMAIL_PROVIDER=resend` plus `RESEND_API_KEY` or
+  `EMAIL_PROVIDER_API_KEY` for Resend delivery. Production defaults to Resend
+  when no provider is set.
+- `MEETING_SCHEDULER_APP_URL` for absolute links in passwordless and background
+  lifecycle notifications.
+- `MEETING_SCHEDULER_NOTIFICATION_PROCESS_SECRET` protects
+  `POST /api/notifications/process` in production. Send it as
+  `Authorization: Bearer <secret>`.
 
 Optional local-development identity helper:
 
@@ -260,11 +276,15 @@ Optional local-development identity helper:
 - `MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true` in the Convex runtime returns
   raw dev magic-link URLs from the request API. This is unsafe for production and
   should only be used on a local machine.
+- `MEETING_SCHEDULER_EMAIL_PROVIDER=development` forces the development email
+  adapter. Non-production defaults to this adapter.
+- `MEETING_SCHEDULER_EMAIL_DEV_LOG_CONTENT=true` logs local email bodies to the
+  server console. Leave unset unless you explicitly need to inspect a local email
+  body.
 
-Reserved for later notification delivery:
-
-- `EMAIL_FROM`
-- `EMAIL_PROVIDER_API_KEY`
+Development email delivery stores messages in memory for tests and logs only the
+recipient, subject, and local provider message id by default. Production must not
+enable dev magic-link exposure or dev email body logging.
 
 ## Development
 
@@ -319,7 +339,8 @@ npm run build
 
 ## Stage Boundaries
 
-Stage 7 intentionally does not implement production email notification delivery
-or AI-agent APIs. Passwordless identity is recovery-only: accounts are not
-required, passwords do not exist, and membership secret links remain the primary
-direct access credential.
+Stage 8 intentionally does not implement AI-agent APIs, webhook verification,
+provider-specific bounce handling, or a notification management console.
+Passwordless identity is recovery-only: accounts are not required, passwords do
+not exist, and membership secret links remain the primary direct access
+credential.

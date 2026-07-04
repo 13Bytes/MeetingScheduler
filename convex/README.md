@@ -21,15 +21,17 @@ tokens, availability records, notifications, and audit events.
   passwordless recovery.
 - `magicLinks` stores verification and recovery tokens by hash with expiry and
   consume timestamps.
-- `notificationOutbox` is a delivery placeholder for later email notifications.
+- `notificationOutbox` stores queued, sending, sent, failed, and cancelled email
+  delivery records with dedupe keys, attempts, provider ids, sent timestamps, and
+  sanitized error text.
 - `auditEvents` records domain events for traceability.
 
 ## Token Strategy
 
 Membership links and magic links are bearer secrets. Membership creation returns
 the raw personal link token once. Magic-link issue requests queue a notification
-placeholder and return only a fingerprint unless local development explicitly
-enables dev magic-link exposure. The database stores:
+record and return only a fingerprint unless local development explicitly enables
+dev magic-link exposure. The database stores:
 
 - `tokenHash`: a SHA-256 hash with an application context prefix.
 - `tokenFingerprint`: the first 16 characters of the hash digest for support
@@ -75,9 +77,13 @@ Participant availability saves use the same lifecycle and membership checks.
 Clearing a cell deletes that member's availability record for the cell; it does
 not create a fourth persisted response value.
 
-Finalization and reopening queue `notificationOutbox` placeholder rows for
-active memberships with email identities. Stage 7 does not send production
-email; the outbox only records enough metadata for a later delivery worker.
+Finalization and reopening queue `notificationOutbox` rows only for active
+memberships attached to verified email identities. Dedupe keys use the meeting,
+lifecycle revision, event kind, and email identity so one recipient does not get
+duplicate sends for the same logical event. The Next.js notification processor
+claims due rows, sends email through the configured adapter, then marks rows
+`sent` or `failed` with a retry time. Unsupported or no-longer-attached
+recipients are cancelled.
 
 ## Passwordless Identity
 
@@ -97,6 +103,12 @@ and the explicit local/dev Convex runtime set
 `MEETING_SCHEDULER_ALLOW_DEV_IDENTITY_SECRET=true`. Development magic-link
 exposure also requires an explicit local/dev runtime plus
 `MEETING_SCHEDULER_DEV_EXPOSE_MAGIC_LINKS=true`.
+
+Stage 8 email delivery keeps raw magic-link tokens server-only. Passwordless
+request routes receive the raw token once from Convex, render the email, and then
+mark the non-secret outbox row sent or failed. Lifecycle notification rows never
+store membership bearer tokens; they link to the public meeting and recovery
+dashboard.
 
 ## Results and Privacy
 

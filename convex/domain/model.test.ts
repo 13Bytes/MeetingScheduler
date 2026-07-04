@@ -3,6 +3,7 @@ import {
   DEFAULT_GRANULARITY_MINUTES,
   assertAvailabilityCellAlignment,
   assertAvailabilityCellDuration,
+  buildGeneratedMeetingSlug,
   getMembershipCapabilities,
   isSlotFullyCoveredByAllowedRanges,
   makeAvailabilityCellKey,
@@ -417,6 +418,12 @@ describe("schema-adjacent helpers", () => {
       /120 characters or fewer/u,
     );
     expect(slugifyMeetingTitle("  Team Planning / Q3!  ")).toBe("team-planning-q3");
+    expect(
+      buildGeneratedMeetingSlug({
+        title: "  Team Planning / Q3!  ",
+        tokenFingerprint: "FLUOTf_ab-123",
+      }),
+    ).toBe("team-planning-q3-fluotf");
     expect(normalizeEmailAddress("  Ada@Example.COM ")).toBe("ada@example.com");
     expect(() => normalizeEmailAddress("not-email")).toThrow(
       /Email address must be valid/u,

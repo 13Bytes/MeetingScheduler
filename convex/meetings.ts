@@ -7,6 +7,7 @@ import {
   assertAvailabilityCellDuration,
   assertCanAdminister,
   assertCanEditOpenMeeting,
+  buildGeneratedMeetingSlug,
   getMembershipCapabilities,
   isSlotInsideAllowedRanges,
   makeAvailabilityCellKey,
@@ -31,6 +32,7 @@ import {
   buildFinalizeMeetingPatch,
   buildLifecycleNotificationPlaceholders,
   buildReopenMeetingPatch,
+  shouldAttemptNotificationDelivery,
 } from "./domain/finalization";
 import { createSecretToken, hashSecretToken } from "./domain/tokens";
 import {
@@ -50,6 +52,8 @@ const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET
 const DEV_INTERNAL_IDENTITY_SECRET =
   "dev-only-meeting-scheduler-identity-internal-secret";
 const EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS = 5 * 60 * 1000;
+const NOTIFICATION_DELIVERY_LEASE_MS = 15 * 60 * 1000;
+const MAX_NOTIFICATION_ATTEMPTS = 5;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -87,11 +91,13 @@ export const createMeeting = mutation({
     }
 
     const adminToken = await createSecretToken("membership");
-    const slugBase = slugifyMeetingTitle(args.slug ?? title);
     const slug =
       args.slug === undefined
-        ? `${slugBase}-${adminToken.tokenFingerprint.slice(0, 6)}`
-        : slugBase;
+        ? buildGeneratedMeetingSlug({
+            title,
+            tokenFingerprint: adminToken.tokenFingerprint,
+          })
+        : slugifyMeetingTitle(args.slug);
 
     const existingMeeting = await ctx.db
       .query("meetings")
@@ -168,10 +174,7 @@ export const readMeetingBySlug = query({
     slug: v.string(),
   },
   handler: async (ctx, args) => {
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.slug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.slug);
     if (!meeting) {
       return null;
     }
@@ -194,10 +197,7 @@ export const readPublicMeetingBySlug = query({
     slug: v.string(),
   },
   handler: async (ctx, args) => {
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.slug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.slug);
     if (!meeting) {
       return null;
     }
@@ -281,10 +281,7 @@ export const createMembership = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.meetingSlug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
     if (!meeting) {
       throw new Error("Meeting not found");
     }
@@ -349,10 +346,7 @@ export const createParticipantMembership = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.meetingSlug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
     if (!meeting) {
       throw new Error("Meeting not found");
     }
@@ -625,13 +619,14 @@ export const createMagicLink = mutation({
       membershipId: recoveryTarget.membershipId,
       emailIdentityId,
       kind: `magicLink.${args.purpose}`,
-      status: "pending",
+      status: "cancelled",
       dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
       payload: {
         magicLinkId,
         tokenFingerprint: magicLinkToken.tokenFingerprint,
       },
       attempts: 0,
+      lastError: "Magic link delivery requires the server email adapter route",
       createdAt: now,
       updatedAt: now,
     });
@@ -642,7 +637,7 @@ export const createMagicLink = mutation({
       devMagicLinkToken: shouldExposeDevMagicLinkToken()
         ? magicLinkToken.rawToken
         : undefined,
-      deliveryQueued: true,
+      deliveryQueued: false,
     };
   },
 });
@@ -657,6 +652,216 @@ export const requestEmailVerification = mutation({
       email: args.email,
       displayName: args.displayName,
     });
+  },
+});
+
+export const requestEmailVerificationForDelivery = mutation({
+  args: {
+    internalSecret: v.string(),
+    email: v.string(),
+    displayName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    return await createEmailVerificationMagicLink(ctx, {
+      email: args.email,
+      displayName: args.displayName,
+      exposeRawToken: true,
+      queueForDelivery: true,
+    });
+  },
+});
+
+export const listQueuedEmailNotifications = query({
+  args: {
+    internalSecret: v.string(),
+    now: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = args.now ?? Date.now();
+    const limit = Math.min(Math.max(args.limit ?? 20, 1), 50);
+    const statuses = ["queued", "pending", "failed", "sending"] as const;
+    const notificationIds: Id<"notificationOutbox">[] = [];
+
+    for (const status of statuses) {
+      if (notificationIds.length >= limit) {
+        break;
+      }
+      const notifications = await ctx.db
+        .query("notificationOutbox")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .collect();
+      for (const notification of notifications) {
+        if (
+          notificationIds.length < limit &&
+          notification.kind.startsWith("meeting.") &&
+          shouldAttemptNotificationDelivery({
+            status: notification.status,
+            scheduledFor: notification.scheduledFor,
+            attempts: notification.attempts,
+            now,
+            maxAttempts: MAX_NOTIFICATION_ATTEMPTS,
+          })
+        ) {
+          notificationIds.push(notification._id);
+        }
+      }
+    }
+
+    return { notificationIds };
+  },
+});
+
+export const claimNotificationForDelivery = mutation({
+  args: {
+    internalSecret: v.string(),
+    notificationId: v.id("notificationOutbox"),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = args.now ?? Date.now();
+    const notification = await ctx.db.get(args.notificationId);
+    if (!notification) {
+      return { status: "skipped" as const, reason: "not_found" };
+    }
+    if (
+      !shouldAttemptNotificationDelivery({
+        status: notification.status,
+        scheduledFor: notification.scheduledFor,
+        attempts: notification.attempts,
+        now,
+        maxAttempts: MAX_NOTIFICATION_ATTEMPTS,
+      })
+    ) {
+      return { status: "skipped" as const, reason: "not_due" };
+    }
+    if (
+      notification.kind !== "meeting.finalized" &&
+      notification.kind !== "meeting.reopened"
+    ) {
+      return { status: "skipped" as const, reason: "unsupported_kind" };
+    }
+    if (
+      !notification.meetingId ||
+      !notification.membershipId ||
+      !notification.emailIdentityId
+    ) {
+      await ctx.db.patch(notification._id, {
+        status: "cancelled",
+        lastError: "Notification is missing recipient context",
+        updatedAt: now,
+      });
+      return { status: "cancelled" as const, reason: "missing_context" };
+    }
+
+    const [meeting, membership, identity] = await Promise.all([
+      ctx.db.get(notification.meetingId),
+      ctx.db.get(notification.membershipId),
+      ctx.db.get(notification.emailIdentityId),
+    ]);
+    if (
+      !meeting ||
+      !membership ||
+      membership.revokedAt !== undefined ||
+      membership.meetingId !== notification.meetingId ||
+      membership.emailIdentityId !== notification.emailIdentityId ||
+      !identity?.verifiedAt
+    ) {
+      await ctx.db.patch(notification._id, {
+        status: "cancelled",
+        lastError: "Recipient is no longer verified and attached",
+        updatedAt: now,
+      });
+      return { status: "cancelled" as const, reason: "invalid_recipient" };
+    }
+
+    const attempts = notification.attempts + 1;
+    await ctx.db.patch(notification._id, {
+      status: "sending",
+      attempts,
+      scheduledFor: now + NOTIFICATION_DELIVERY_LEASE_MS,
+      updatedAt: now,
+    });
+
+    return {
+      status: "claimed" as const,
+      notification: {
+        _id: notification._id,
+        kind: notification.kind,
+        dedupeKey: notification.dedupeKey,
+        payload: notification.payload,
+        attempts,
+      },
+      meeting: {
+        title: meeting.title,
+        slug: meeting.slug,
+      },
+      recipient: {
+        normalizedEmail: identity.normalizedEmail,
+      },
+    };
+  },
+});
+
+export const markNotificationSent = mutation({
+  args: {
+    internalSecret: v.string(),
+    notificationId: v.id("notificationOutbox"),
+    provider: v.string(),
+    providerMessageId: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = args.now ?? Date.now();
+    const notification = await ctx.db.get(args.notificationId);
+    if (!notification) {
+      return { status: "skipped" as const };
+    }
+    if (notification.status === "sent") {
+      return { status: "sent" as const };
+    }
+    await ctx.db.patch(notification._id, {
+      status: "sent",
+      provider: args.provider,
+      providerMessageId: args.providerMessageId,
+      sentAt: now,
+      scheduledFor: undefined,
+      lastError: undefined,
+      updatedAt: now,
+    });
+    return { status: "sent" as const };
+  },
+});
+
+export const markNotificationFailed = mutation({
+  args: {
+    internalSecret: v.string(),
+    notificationId: v.id("notificationOutbox"),
+    error: v.string(),
+    retryAt: v.optional(v.number()),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = args.now ?? Date.now();
+    const notification = await ctx.db.get(args.notificationId);
+    if (!notification) {
+      return { status: "skipped" as const };
+    }
+    if (notification.status === "sent") {
+      return { status: "sent" as const };
+    }
+    await ctx.db.patch(notification._id, {
+      status: "failed",
+      lastError: args.error,
+      scheduledFor: args.retryAt,
+      updatedAt: now,
+    });
+    return { status: "failed" as const };
   },
 });
 
@@ -1184,6 +1389,26 @@ async function buildResultsForMeeting(
   });
 }
 
+async function findMeetingBySlug(ctx: QueryLikeCtx, meetingSlug: string) {
+  const exactMeeting = await ctx.db
+    .query("meetings")
+    .withIndex("by_slug", (q) => q.eq("slug", meetingSlug))
+    .unique();
+  if (exactMeeting) {
+    return exactMeeting;
+  }
+
+  const normalizedSlug = slugifyMeetingTitle(meetingSlug);
+  if (normalizedSlug === meetingSlug) {
+    return null;
+  }
+
+  return await ctx.db
+    .query("meetings")
+    .withIndex("by_slug", (q) => q.eq("slug", normalizedSlug))
+    .unique();
+}
+
 async function findMembershipByToken(ctx: QueryLikeCtx, membershipToken: string) {
   const resolved = await resolveMembershipByToken(ctx, membershipToken);
   return resolved?.membership ?? null;
@@ -1322,12 +1547,25 @@ async function assertEmailVerificationRequestAllowed(
     .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", emailIdentityId))
     .collect();
   const cooldownStartedAt = now - EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS;
-  const hasRecentVerificationRequest = recentLinks.some(
-    (link) => link.purpose === "emailVerification" && link.createdAt > cooldownStartedAt,
-  );
-  if (hasRecentVerificationRequest) {
-    throw new Error("Please wait before requesting another verification link");
+  for (const link of recentLinks) {
+    if (link.purpose !== "emailVerification" || link.createdAt <= cooldownStartedAt) {
+      continue;
+    }
+    if (!(await wasMagicLinkDeliveryTerminallyFailed(ctx, link.tokenFingerprint))) {
+      throw new Error("Please wait before requesting another verification link");
+    }
   }
+}
+
+async function wasMagicLinkDeliveryTerminallyFailed(
+  ctx: MutationLikeCtx,
+  tokenFingerprint: string,
+) {
+  const notification = await ctx.db
+    .query("notificationOutbox")
+    .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", `magicLink:${tokenFingerprint}`))
+    .unique();
+  return notification?.status === "failed";
 }
 
 async function createEmailVerificationMagicLink(
@@ -1335,10 +1573,13 @@ async function createEmailVerificationMagicLink(
   args: {
     email: string;
     displayName?: string;
+    exposeRawToken?: boolean;
+    queueForDelivery?: boolean;
   },
 ) {
   const now = Date.now();
   const expiresAt = normalizeMagicLinkExpiry({ now });
+  const normalizedEmail = normalizeEmailAddress(args.email);
   const emailIdentityId = await upsertEmailIdentity(
     ctx,
     args.email,
@@ -1358,25 +1599,32 @@ async function createEmailVerificationMagicLink(
     createdAt: now,
   });
 
-  await ctx.db.insert("notificationOutbox", {
+  const deliveryQueued = args.queueForDelivery === true;
+  const notificationOutboxId = await ctx.db.insert("notificationOutbox", {
     emailIdentityId,
     kind: "magicLink.emailVerification",
-    status: "pending",
+    status: deliveryQueued ? "queued" : "cancelled",
     dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
     payload: {
       magicLinkId,
       tokenFingerprint: magicLinkToken.tokenFingerprint,
     },
     attempts: 0,
+    lastError: deliveryQueued
+      ? undefined
+      : "Magic link delivery requires the server email adapter route",
     createdAt: now,
     updatedAt: now,
   });
 
   return {
     magicLinkId,
+    notificationOutboxId,
+    normalizedEmail,
     tokenFingerprint: magicLinkToken.tokenFingerprint,
     expiresAt,
-    deliveryQueued: true,
+    deliveryQueued,
+    rawMagicLinkToken: args.exposeRawToken ? magicLinkToken.rawToken : undefined,
     devMagicLinkToken: shouldExposeDevMagicLinkToken()
       ? magicLinkToken.rawToken
       : undefined,
@@ -1526,9 +1774,26 @@ async function insertNotificationPlaceholdersForMeeting(
     .query("memberships")
     .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
     .collect();
+  const emailIdentityIds = Array.from(
+    new Set(
+      memberships
+        .map((membership) => membership.emailIdentityId)
+        .filter((emailIdentityId): emailIdentityId is Id<"emailIdentities"> =>
+          Boolean(emailIdentityId),
+        ),
+    ),
+  );
+  const loadedEmailIdentities = await Promise.all(
+    emailIdentityIds.map((emailIdentityId) => ctx.db.get(emailIdentityId)),
+  );
+  const emailIdentities = loadedEmailIdentities.filter(
+    (identity): identity is NonNullable<(typeof loadedEmailIdentities)[number]> =>
+      identity !== null,
+  );
   const placeholders = buildLifecycleNotificationPlaceholders({
     meetingId: args.meetingId,
     memberships,
+    emailIdentities,
     kind: args.kind,
     lifecycleRevision: args.lifecycleRevision,
     payload: args.payload,
@@ -1536,6 +1801,15 @@ async function insertNotificationPlaceholdersForMeeting(
   });
 
   for (const placeholder of placeholders) {
+    if (placeholder.dedupeKey) {
+      const existing = await ctx.db
+        .query("notificationOutbox")
+        .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", placeholder.dedupeKey))
+        .unique();
+      if (existing) {
+        continue;
+      }
+    }
     await ctx.db.insert("notificationOutbox", placeholder);
   }
 }
