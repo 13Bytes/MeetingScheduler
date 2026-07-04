@@ -40,6 +40,7 @@ const detailedResults: MeetingResults = {
   granularityMinutes: 30,
   durationMinutes: 60,
   totalParticipantCount: 2,
+  voteCount: 4,
   candidateCount: 1,
   detailsVisible: true,
   candidates: [candidateFixture],
@@ -81,12 +82,13 @@ describe("MeetingResultsPanel", () => {
     expect(screen.queryByText(/Bruno/i)).not.toBeInTheDocument();
   });
 
-  it("explains the empty state before participants join", () => {
+  it("hides the recommended shortlist before participants join", () => {
     render(
       <MeetingResultsPanel
         results={{
           ...detailedResults,
           totalParticipantCount: 0,
+          voteCount: 0,
           candidateCount: 0,
           candidates: [],
           shortlist: [],
@@ -94,7 +96,29 @@ describe("MeetingResultsPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/no participants have joined yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/results pending/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no participants have joined yet/i)).not.toBeInTheDocument();
+  });
+
+  it("hides the recommended shortlist until votes are cast", () => {
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          voteCount: 0,
+        }}
+        canAdminister
+        canFinalize
+      />,
+    );
+
+    expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/final selection/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/score heatmap/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/recommendations will appear after someone saves availability/i),
+    ).not.toBeInTheDocument();
   });
 
   it("lets admins finalize the recommended shortlist selection", async () => {
@@ -229,6 +253,7 @@ describe("MeetingResultsPanel", () => {
     );
 
     expect(screen.getByText(/final time/i)).toBeInTheDocument();
+    expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/thu, jun 25, 9:00 am-10:00 am/i).length).toBeGreaterThan(
       0,
     );

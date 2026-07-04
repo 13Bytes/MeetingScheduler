@@ -7,6 +7,7 @@ import {
   assertAvailabilityCellDuration,
   assertCanAdminister,
   assertCanEditOpenMeeting,
+  buildGeneratedMeetingSlug,
   getMembershipCapabilities,
   isSlotInsideAllowedRanges,
   makeAvailabilityCellKey,
@@ -90,11 +91,13 @@ export const createMeeting = mutation({
     }
 
     const adminToken = await createSecretToken("membership");
-    const slugBase = slugifyMeetingTitle(args.slug ?? title);
     const slug =
       args.slug === undefined
-        ? `${slugBase}-${adminToken.tokenFingerprint.slice(0, 6)}`
-        : slugBase;
+        ? buildGeneratedMeetingSlug({
+            title,
+            tokenFingerprint: adminToken.tokenFingerprint,
+          })
+        : slugifyMeetingTitle(args.slug);
 
     const existingMeeting = await ctx.db
       .query("meetings")
@@ -171,10 +174,7 @@ export const readMeetingBySlug = query({
     slug: v.string(),
   },
   handler: async (ctx, args) => {
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.slug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.slug);
     if (!meeting) {
       return null;
     }
@@ -197,10 +197,7 @@ export const readPublicMeetingBySlug = query({
     slug: v.string(),
   },
   handler: async (ctx, args) => {
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.slug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.slug);
     if (!meeting) {
       return null;
     }
@@ -284,10 +281,7 @@ export const createMembership = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.meetingSlug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
     if (!meeting) {
       throw new Error("Meeting not found");
     }
@@ -352,10 +346,7 @@ export const createParticipantMembership = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_slug", (q) => q.eq("slug", slugifyMeetingTitle(args.meetingSlug)))
-      .unique();
+    const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
     if (!meeting) {
       throw new Error("Meeting not found");
     }
@@ -1396,6 +1387,26 @@ async function buildResultsForMeeting(
     generatedAt,
     includeDetails,
   });
+}
+
+async function findMeetingBySlug(ctx: QueryLikeCtx, meetingSlug: string) {
+  const exactMeeting = await ctx.db
+    .query("meetings")
+    .withIndex("by_slug", (q) => q.eq("slug", meetingSlug))
+    .unique();
+  if (exactMeeting) {
+    return exactMeeting;
+  }
+
+  const normalizedSlug = slugifyMeetingTitle(meetingSlug);
+  if (normalizedSlug === meetingSlug) {
+    return null;
+  }
+
+  return await ctx.db
+    .query("meetings")
+    .withIndex("by_slug", (q) => q.eq("slug", normalizedSlug))
+    .unique();
 }
 
 async function findMembershipByToken(ctx: QueryLikeCtx, membershipToken: string) {

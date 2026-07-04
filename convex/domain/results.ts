@@ -53,6 +53,7 @@ export type MeetingResults = {
   granularityMinutes: number;
   durationMinutes: number;
   totalParticipantCount: number;
+  voteCount: number;
   candidateCount: number;
   detailsVisible: boolean;
   candidates: ScoredCandidateSlot[];
@@ -140,6 +141,12 @@ export function buildMeetingResults({
   const activeParticipants = participants.filter(
     (participant) => participant.revokedAt === undefined,
   );
+  const activeMembershipIds = new Set(
+    activeParticipants.map((participant) => participant.membershipId),
+  );
+  const voteCount = availabilityRecords.filter((record) =>
+    activeMembershipIds.has(record.membershipId),
+  ).length;
   const candidates = generateCandidateSlots({
     allowedTimeRanges,
     granularityMinutes,
@@ -164,6 +171,7 @@ export function buildMeetingResults({
     granularityMinutes,
     durationMinutes,
     totalParticipantCount: activeParticipants.length,
+    voteCount,
     candidateCount: scoredCandidates.length,
     detailsVisible: includeDetails,
     candidates: scoredCandidates,
