@@ -40,7 +40,7 @@ const detailedResults: MeetingResults = {
   granularityMinutes: 30,
   durationMinutes: 60,
   totalParticipantCount: 2,
-  voteCount: 4,
+  availabilityCount: 4,
   candidateCount: 1,
   detailsVisible: true,
   candidates: [candidateFixture],
@@ -88,7 +88,7 @@ describe("MeetingResultsPanel", () => {
         results={{
           ...detailedResults,
           totalParticipantCount: 0,
-          voteCount: 0,
+          availabilityCount: 0,
           candidateCount: 0,
           candidates: [],
           shortlist: [],
@@ -101,12 +101,12 @@ describe("MeetingResultsPanel", () => {
     expect(screen.queryByText(/no participants have joined yet/i)).not.toBeInTheDocument();
   });
 
-  it("hides the recommended shortlist until votes are cast", () => {
+  it("shows waiting context until availability is submitted", () => {
     render(
       <MeetingResultsPanel
         results={{
           ...detailedResults,
-          voteCount: 0,
+          availabilityCount: 0,
         }}
         canAdminister
         canFinalize
@@ -114,11 +114,19 @@ describe("MeetingResultsPanel", () => {
     );
 
     expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/final selection/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/score heatmap/i)).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/recommendations will appear after someone saves availability/i),
+      screen.queryByRole("heading", { name: /final selection/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /score heatmap/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/recommendations will appear after someone saves availability/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/awaiting availability/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/final selection and score heatmap will appear/i),
+    ).toBeInTheDocument();
   });
 
   it("lets admins finalize the recommended shortlist selection", async () => {

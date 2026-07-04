@@ -53,7 +53,7 @@ export type MeetingResults = {
   granularityMinutes: number;
   durationMinutes: number;
   totalParticipantCount: number;
-  voteCount: number;
+  availabilityCount: number;
   candidateCount: number;
   detailsVisible: boolean;
   candidates: ScoredCandidateSlot[];
@@ -144,7 +144,7 @@ export function buildMeetingResults({
   const activeMembershipIds = new Set(
     activeParticipants.map((participant) => participant.membershipId),
   );
-  const voteCount = availabilityRecords.filter((record) =>
+  const availabilityCount = availabilityRecords.filter((record) =>
     activeMembershipIds.has(record.membershipId),
   ).length;
   const candidates = generateCandidateSlots({
@@ -171,7 +171,7 @@ export function buildMeetingResults({
     granularityMinutes,
     durationMinutes,
     totalParticipantCount: activeParticipants.length,
-    voteCount,
+    availabilityCount,
     candidateCount: scoredCandidates.length,
     detailsVisible: includeDetails,
     candidates: scoredCandidates,

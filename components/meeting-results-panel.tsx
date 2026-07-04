@@ -43,9 +43,10 @@ export function MeetingResultsPanel({
   onReopen?: () => Promise<unknown>;
 }) {
   const hasParticipants = results.totalParticipantCount > 0;
-  const hasVotes = results.voteCount > 0;
+  const hasVotes = results.availabilityCount > 0;
   const hasCandidates = results.candidateCount > 0;
   const shouldShowShortlist = hasVotes && !selectedSlot;
+  const shouldShowWaitingState = hasParticipants && !hasVotes && !selectedSlot;
   const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{
     tone: "error" | "success";
@@ -170,6 +171,15 @@ export function MeetingResultsPanel({
               ))}
             </CardContent>
           </Card>
+        ) : shouldShowWaitingState ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Results Pending</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyResultsMessage message="Recommendations will appear after someone saves availability." />
+            </CardContent>
+          </Card>
         ) : null}
 
         {hasVotes ? (
@@ -271,6 +281,20 @@ export function MeetingResultsPanel({
                     slots.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+          </aside>
+        ) : shouldShowWaitingState ? (
+          <aside className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Awaiting Availability</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-6 text-slate-600">
+                  Final selection and score heatmap will appear after someone saves
+                  availability.
+                </p>
               </CardContent>
             </Card>
           </aside>

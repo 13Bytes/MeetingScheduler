@@ -251,7 +251,7 @@ describe("candidate scoring and ranking", () => {
     expect(results).toMatchObject({
       generatedAt: 123,
       totalParticipantCount: 2,
-      voteCount: 2,
+      availabilityCount: 2,
       candidateCount: 3,
       detailsVisible: false,
     });
@@ -315,7 +315,7 @@ describe("result privacy", () => {
       granularityMinutes: 30,
       durationMinutes: 60,
       totalParticipantCount: 1,
-      voteCount: 1,
+      availabilityCount: 1,
       candidateCount: 1,
       detailsVisible: true,
       candidates: [
