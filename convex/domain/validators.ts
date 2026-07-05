@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { apiTokenScopes } from "./agent-api";
 
 export const lifecycleStateValidator = v.union(v.literal("open"), v.literal("finalized"));
 
@@ -32,6 +33,10 @@ export const notificationStatusValidator = v.union(
 export const magicLinkPurposeValidator = v.union(
   v.literal("emailVerification"),
   v.literal("membershipRecovery"),
+);
+
+export const apiTokenScopeValidator = v.union(
+  ...apiTokenScopes.map((scope) => v.literal(scope)),
 );
 
 export const allowedTimeRangeValidator = v.object({

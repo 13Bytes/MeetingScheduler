@@ -21,6 +21,9 @@ tokens, availability records, notifications, and audit events.
   passwordless recovery.
 - `magicLinks` stores verification and recovery tokens by hash with expiry and
   consume timestamps.
+- `apiTokens` stores scoped agent/API bearer credentials owned by verified email
+  identities. Tokens are stored by hash/fingerprint and can be revoked without
+  affecting membership secret links.
 - `notificationOutbox` stores queued, sending, sent, failed, and cancelled email
   delivery records with dedupe keys, attempts, provider ids, sent timestamps, and
   sanitized error text.
@@ -51,6 +54,12 @@ Stage 7 recovery mints a new secondary membership token when a verified email
 session asks to recover an attached membership. The raw recovered token is
 returned once through the server route and only its hash/fingerprint are stored.
 Magic links are consumed once and expired links cannot verify identity.
+
+Stage 9 API tokens use the `ms_api_` prefix and are minted only from verified
+email sessions. Convex stores only token hashes and fingerprints. API scopes
+grant action families such as meeting creation or availability writes, but
+meeting-specific admin actions also resolve the token owner to an active
+membership with admin capabilities for that meeting.
 
 ## Lifecycle and Permissions
 

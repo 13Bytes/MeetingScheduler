@@ -11,6 +11,7 @@ import {
   metadataValidator,
   notificationStatusValidator,
   privacyModeValidator,
+  apiTokenScopeValidator,
   tokenFieldsValidator,
 } from "./domain/validators";
 
@@ -118,6 +119,20 @@ export default defineSchema({
     .index("by_email_identity", ["emailIdentityId"])
     .index("by_membership", ["membershipId"])
     .index("by_expiration", ["expiresAt"]),
+
+  apiTokens: defineTable({
+    emailIdentityId: v.id("emailIdentities"),
+    label: v.optional(v.string()),
+    scopes: v.array(apiTokenScopeValidator),
+    ...tokenFieldsValidator,
+    tokenLastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_email_identity", ["emailIdentityId"])
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_token_fingerprint", ["tokenFingerprint"]),
 
   notificationOutbox: defineTable({
     meetingId: v.optional(v.id("meetings")),
