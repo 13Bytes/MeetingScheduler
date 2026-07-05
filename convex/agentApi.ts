@@ -525,11 +525,7 @@ async function requireAdminMembershipForCredential(
   credential: ApiCredential,
   meeting: Doc<"meetings">,
 ) {
-  const membership = await findCredentialMembershipForMeeting(
-    ctx,
-    credential,
-    meeting._id,
-  );
+  const membership = await findCredentialMembershipForMeeting(ctx, credential, meeting);
   const capabilities = getMembershipCapabilities(meeting, membership);
   if (!membership || !capabilities.canAdminister) {
     throw new Error("API token owner cannot administer this meeting");
