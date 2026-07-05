@@ -51,6 +51,32 @@ describe("agent API authorization helpers", () => {
     ).toBe("admin-1");
   });
 
+  it("falls back to the first active membership when none can administer", () => {
+    const meeting = {
+      _id: "meeting-1",
+      adminMode: "roleBased" as const,
+      lifecycleState: "open" as const,
+    };
+
+    expect(
+      selectApiMembershipForMeeting(
+        [
+          {
+            _id: "member-1",
+            meetingId: "meeting-1",
+            role: "member",
+          },
+          {
+            _id: "member-2",
+            meetingId: "meeting-1",
+            role: "member",
+          },
+        ],
+        meeting,
+      )?._id,
+    ).toBe("member-1");
+  });
+
   it("ignores revoked memberships when resolving token-owner meeting authority", () => {
     expect(
       selectApiMembershipForMeeting(

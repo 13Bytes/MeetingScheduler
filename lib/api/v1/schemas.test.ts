@@ -3,6 +3,7 @@ import {
   parseAvailabilityBody,
   parseCreateApiTokenBody,
   parseCreateMeetingBody,
+  maxAvailabilityRecordsPerRequest,
 } from "./schemas";
 
 describe("agent API schemas", () => {
@@ -56,5 +57,17 @@ describe("agent API schemas", () => {
         ],
       }),
     ).toThrow(/response must be yes/u);
+  });
+
+  it("rejects oversized availability batches", () => {
+    expect(() =>
+      parseAvailabilityBody({
+        records: Array.from({ length: maxAvailabilityRecordsPerRequest + 1 }, () => ({
+          startUtc: "2026-07-06T09:00:00.000Z",
+          endUtc: "2026-07-06T09:30:00.000Z",
+          response: "yes",
+        })),
+      }),
+    ).toThrow(/must not exceed 500 entries/u);
   });
 });

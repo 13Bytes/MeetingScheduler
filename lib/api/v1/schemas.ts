@@ -3,6 +3,8 @@ import { ApiRouteError } from "./responses";
 
 export { apiTokenScopes };
 
+export const maxAvailabilityRecordsPerRequest = 500;
+
 export type AllowedTimeRangeInput = {
   startUtc: string;
   endUtc: string;
@@ -61,6 +63,13 @@ export function parseAvailabilityBody(body: Record<string, unknown>) {
   const records = body.records;
   if (!Array.isArray(records)) {
     throw new ApiRouteError(400, "invalid_request", "records must be an array.");
+  }
+  if (records.length > maxAvailabilityRecordsPerRequest) {
+    throw new ApiRouteError(
+      400,
+      "invalid_request",
+      `records must not exceed ${maxAvailabilityRecordsPerRequest} entries.`,
+    );
   }
   return {
     records: records.map((record, index) => {

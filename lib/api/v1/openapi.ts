@@ -33,6 +33,12 @@ export const openApiDocument = {
         scheme: "bearer",
         bearerFormat: "ms_api",
       },
+      emailSessionCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "ms_email_session",
+        description: "Verified passwordless email session cookie.",
+      },
     },
     schemas: {
       Error: errorSchema,
@@ -217,6 +223,7 @@ export const openApiDocument = {
   paths: {
     "/tokens": {
       post: {
+        security: [{ emailSessionCookie: [] }],
         summary: "Create an API token for the signed-in verified email identity",
         requestBody: requiredJson("#/components/schemas/ApiTokenCreateRequest"),
         responses: {
@@ -228,6 +235,7 @@ export const openApiDocument = {
     },
     "/tokens/{tokenFingerprint}": {
       delete: {
+        security: [{ emailSessionCookie: [] }],
         summary: "Revoke an API token owned by the signed-in verified identity",
         parameters: [pathParameter("tokenFingerprint")],
         responses: {

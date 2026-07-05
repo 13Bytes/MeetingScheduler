@@ -74,7 +74,7 @@ export const createApiToken = mutation({
     scopes: v.array(apiTokenScopeValidator),
   },
   handler: async (ctx, args) => {
-    assertInternalIdentitySecret(args.internalSecret);
+    await assertInternalIdentitySecret(args.internalSecret);
     const identity = await ctx.db.get(args.emailIdentityId);
     assertVerifiedEmailIdentity(identity);
     const scopes = normalizeApiTokenScopes(args.scopes);
@@ -108,7 +108,7 @@ export const revokeApiToken = mutation({
     tokenFingerprint: v.string(),
   },
   handler: async (ctx, args) => {
-    assertInternalIdentitySecret(args.internalSecret);
+    await assertInternalIdentitySecret(args.internalSecret);
     const identity = await ctx.db.get(args.emailIdentityId);
     assertVerifiedEmailIdentity(identity);
     const token = await ctx.db
@@ -292,6 +292,26 @@ export const createParticipant = mutation({
     }
     const now = Date.now();
     const displayName = normalizeParticipantDisplayName(args.displayName);
+    const existingMemberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_email_identity", (q) =>
+        q.eq("emailIdentityId", credential.identity._id),
+      )
+      .collect();
+    const existingMembership = existingMemberships.find(
+      (membership) =>
+        membership.meetingId === meeting._id && membership.revokedAt === undefined,
+    );
+    if (existingMembership) {
+      await touchApiToken(ctx, credential.token._id, now);
+      return {
+        meetingId: meeting._id,
+        membershipId: existingMembership._id,
+        displayName: existingMembership.displayName ?? displayName,
+        role: existingMembership.role,
+      };
+    }
+
     const membershipToken = await createSecretToken("membership");
     const membershipId = await ctx.db.insert("memberships", {
       meetingId: meeting._id,
@@ -841,21 +861,38 @@ function dedupeAvailabilityRecordBatch<T extends { startUtc: string; endUtc: str
   return records;
 }
 
-function assertInternalIdentitySecret(providedSecret: string): void {
+async function assertInternalIdentitySecret(providedSecret: string): Promise<void> {
   const expectedSecret = process.env[INTERNAL_IDENTITY_SECRET_ENV];
   if (!expectedSecret) {
     if (
       isExplicitLocalDevelopmentRuntime() &&
       process.env.MEETING_SCHEDULER_ALLOW_DEV_IDENTITY_SECRET === "true" &&
-      providedSecret === DEV_INTERNAL_IDENTITY_SECRET
+      (await constantTimeEqualString(providedSecret, DEV_INTERNAL_IDENTITY_SECRET))
     ) {
       return;
     }
     throw new Error(`${INTERNAL_IDENTITY_SECRET_ENV} is required`);
   }
-  if (providedSecret !== expectedSecret) {
+  if (!(await constantTimeEqualString(providedSecret, expectedSecret))) {
     throw new Error("Internal identity authorization failed");
   }
+}
+
+async function constantTimeEqualString(left: string, right: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length, 1);
+  const paddedLeft = new Uint8Array(maxLength);
+  const paddedRight = new Uint8Array(maxLength);
+  paddedLeft.set(leftBytes.slice(0, maxLength));
+  paddedRight.set(rightBytes.slice(0, maxLength));
+
+  let diff = leftBytes.length ^ rightBytes.length;
+  for (let index = 0; index < maxLength; index += 1) {
+    diff |= paddedLeft[index] ^ paddedRight[index];
+  }
+  return diff === 0;
 }
 
 function isExplicitLocalDevelopmentRuntime(): boolean {

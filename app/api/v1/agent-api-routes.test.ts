@@ -265,11 +265,11 @@ describe("agent API routes", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(500);
     expect(body).toEqual({
       error: {
-        code: "invalid_request",
-        message: "MEETING_SCHEDULER_IDENTITY_SESSION_SECRET is required",
+        code: "internal_error",
+        message: "The API request could not be completed.",
       },
     });
   });
@@ -356,8 +356,8 @@ describe("agent API routes", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(body.error.code).toBe("invalid_request");
+    expect(response.status).toBe(500);
+    expect(body.error.code).toBe("internal_error");
     expect(mutationMock).not.toHaveBeenCalled();
   });
 });

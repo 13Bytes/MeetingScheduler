@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "conflict"
+  | "internal_error"
   | "service_unavailable";
 
 export class ApiRouteError extends Error {
@@ -34,7 +35,12 @@ export function handleApiError(caughtError: unknown) {
   if (caughtError instanceof ApiRouteError) {
     return apiErrorResponse(caughtError.status, caughtError.code, caughtError.message);
   }
-  return apiErrorResponseForMessage(getErrorMessage(caughtError));
+  const message = getErrorMessage(caughtError);
+  const response = apiErrorResponseForMessage(message);
+  if (response.status >= 500) {
+    console.error("Agent API request failed", caughtError);
+  }
+  return response;
 }
 
 export function apiErrorResponseForMessage(message: string) {
@@ -65,12 +71,22 @@ export function apiErrorResponseForMessage(message: string) {
       "The API token is not authorized for this action.",
     );
   }
-  if (/required|invalid|must|duplicate|already exists|outside/iu.test(message)) {
+  if (/duplicate|already exists/iu.test(message)) {
+    return apiErrorResponse(409, "conflict", "The requested resource already exists.");
+  }
+  if (/MEETING_SCHEDULER_|NEXT_PUBLIC_CONVEX_URL|internal identity/iu.test(message)) {
+    return apiErrorResponse(
+      500,
+      "internal_error",
+      "The API request could not be completed.",
+    );
+  }
+  if (/required|invalid|must|outside/iu.test(message)) {
     return apiErrorResponse(400, "invalid_request", message);
   }
   return apiErrorResponse(
-    503,
-    "service_unavailable",
+    500,
+    "internal_error",
     "The API request could not be completed.",
   );
 }
