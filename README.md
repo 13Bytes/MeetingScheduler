@@ -312,6 +312,10 @@ npm run convex:dev
 Convex codegen and live validation require a configured `CONVEX_DEPLOYMENT`.
 Without that environment value, `npx convex codegen` exits with
 `No CONVEX_DEPLOYMENT set` before checking the local functions.
+Stage 9 verification in isolated worktrees may also be unable to run codegen
+when outbound Convex access is blocked; in that case build/type checks require
+local ignored `convex/_generated` stubs or a configured deployment, and the
+limitation should be called out in PR notes.
 
 Lint:
 
@@ -337,10 +341,24 @@ Build:
 npm run build
 ```
 
+## Agent API
+
+Stage 9 adds an agent-friendly HTTP API under `/api/v1`. Agents authenticate
+with scoped `ms_api_...` bearer tokens created from a verified email identity;
+membership secret links remain distinct and are not API credentials. API tokens
+are hashed in Convex, can be revoked by fingerprint, and do not grant universal
+admin rights. Finalize/reopen operations still require that the token owner has
+admin authority for the specific meeting.
+
+The machine-readable API description is served from `/api/v1/openapi.json`.
+Developer examples for creating polls, reading state, submitting availability,
+reading recommendations, and finalizing meetings are in `docs/API.md`.
+
 ## Stage Boundaries
 
-Stage 8 intentionally does not implement AI-agent APIs, webhook verification,
-provider-specific bounce handling, or a notification management console.
-Passwordless identity is recovery-only: accounts are not required, passwords do
+Stage 9 intentionally keeps the agent API focused on authenticated poll
+management. It does not implement webhook verification, provider-specific bounce
+handling, or a notification management console. Passwordless identity is
+recovery and API-token ownership only: accounts are not required, passwords do
 not exist, and membership secret links remain the primary direct access
-credential.
+credential for normal web users.

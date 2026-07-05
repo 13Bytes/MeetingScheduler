@@ -48,18 +48,18 @@ export function normalizeMagicLinkExpiry({
   return expiresAt;
 }
 
-export function assertMagicLinkCanBeConsumed(
-  magicLink: MagicLinkState | null | undefined,
+export function assertMagicLinkCanBeConsumed<T extends MagicLinkState>(
+  magicLink: T | null | undefined,
   now: number,
-): asserts magicLink is MagicLinkState {
+): asserts magicLink is T {
   if (!magicLink || magicLink.consumedAt || magicLink.expiresAt <= now) {
     throw new Error("Magic link is invalid or expired");
   }
 }
 
-export function assertVerifiedEmailIdentity(
-  identity: VerifiedEmailIdentity | null | undefined,
-): asserts identity is VerifiedEmailIdentity & { verifiedAt: number } {
+export function assertVerifiedEmailIdentity<T extends VerifiedEmailIdentity>(
+  identity: T | null | undefined,
+): asserts identity is T & { verifiedAt: number } {
   if (!identity?.verifiedAt) {
     throw new Error("Email identity must be verified");
   }

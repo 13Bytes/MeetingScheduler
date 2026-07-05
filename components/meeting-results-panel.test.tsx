@@ -98,7 +98,9 @@ describe("MeetingResultsPanel", () => {
 
     expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/results pending/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/no participants have joined yet/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/no participants have joined yet/i),
+    ).not.toBeInTheDocument();
   });
 
   it("shows waiting context until availability is submitted", () => {
