@@ -20,7 +20,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (!result) {
       return apiErrorResponse(404, "not_found", "The requested resource was not found.");
     }
-    return apiResponse({ recommendations: result });
+    return apiResponse(result);
   } catch (caughtError) {
     return handleApiError(caughtError);
   }

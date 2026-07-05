@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as createMeeting } from "./meetings/route";
 import { GET as readMeeting } from "./meetings/[slug]/route";
+import { GET as readRecommendations } from "./meetings/[slug]/recommendations/route";
 import { PUT as saveAvailability } from "./meetings/[slug]/participants/[membershipId]/availability/route";
 import { POST as finalizeMeeting } from "./meetings/[slug]/finalize/route";
 import { POST as reopenMeeting } from "./meetings/[slug]/reopen/route";
@@ -32,6 +33,7 @@ vi.mock("@/convex/_generated/api", () => ({
       revokeApiToken: "agentApi:revokeApiToken",
       createMeeting: "agentApi:createMeeting",
       readMeeting: "agentApi:readMeeting",
+      readRecommendations: "agentApi:readRecommendations",
       saveAvailability: "agentApi:saveAvailability",
       finalizeMeeting: "agentApi:finalizeMeeting",
       reopenMeeting: "agentApi:reopenMeeting",
@@ -140,6 +142,26 @@ describe("agent API routes", () => {
     });
     expect(body.results.detailsVisible).toBe(false);
     expect(JSON.stringify(body)).not.toContain("participantDetails");
+  });
+
+  it("returns recommendations as the direct meeting-results payload", async () => {
+    queryMock.mockResolvedValueOnce({
+      detailsVisible: false,
+      shortlist: [{ rank: 1, availableParticipantCount: 2 }],
+    });
+
+    const response = await readRecommendations(
+      new Request("https://localhost/api/v1/meetings/research-sync/recommendations"),
+      { params: Promise.resolve({ slug: "research-sync" }) },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      detailsVisible: false,
+      shortlist: [{ rank: 1, availableParticipantCount: 2 }],
+    });
+    expect(body.recommendations).toBeUndefined();
   });
 
   it("maps finalized meeting availability writes to the stable conflict error", async () => {
