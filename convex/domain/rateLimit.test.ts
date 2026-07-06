@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateDurableRateLimit, normalizeDurableRateLimitKey } from "./rate-limit";
+import { evaluateDurableRateLimit, normalizeDurableRateLimitKey } from "./rateLimit";
 
 describe("durable rate-limit helpers", () => {
   it("increments an active durable bucket and reports retry timing", () => {

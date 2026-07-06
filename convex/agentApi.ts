@@ -40,7 +40,7 @@ import {
   normalizeApiTokenScopes,
   selectApiMembershipForMeeting,
   type ApiTokenScope,
-} from "./domain/agent-api";
+} from "./domain/agentApi";
 
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
 const DEV_INTERNAL_IDENTITY_SECRET =

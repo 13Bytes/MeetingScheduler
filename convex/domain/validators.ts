@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { apiTokenScopes } from "./agent-api";
+import { apiTokenScopes } from "./agentApi";
 
 export const lifecycleStateValidator = v.union(v.literal("open"), v.literal("finalized"));
 

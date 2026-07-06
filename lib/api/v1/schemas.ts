@@ -1,4 +1,4 @@
-import { apiTokenScopes, type ApiTokenScope } from "@/convex/domain/agent-api";
+import { apiTokenScopes, type ApiTokenScope } from "@/convex/domain/agentApi";
 import { ApiRouteError } from "./responses";
 
 export { apiTokenScopes };

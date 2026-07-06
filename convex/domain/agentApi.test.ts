@@ -4,7 +4,7 @@ import {
   assertApiTokenHasScopes,
   normalizeApiTokenScopes,
   selectApiMembershipForMeeting,
-} from "./agent-api";
+} from "./agentApi";
 
 describe("agent API authorization helpers", () => {
   it("deduplicates scopes and rejects empty API tokens", () => {

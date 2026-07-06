@@ -2,7 +2,7 @@ import type { MutationCtx } from "./_generated/server";
 import {
   evaluateDurableRateLimit,
   normalizeDurableRateLimitKey,
-} from "./domain/rate-limit";
+} from "./domain/rateLimit";
 
 export async function assertConvexRateLimit(
   ctx: MutationCtx,
