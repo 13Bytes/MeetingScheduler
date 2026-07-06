@@ -28,6 +28,8 @@ tokens, availability records, notifications, and audit events.
   delivery records with dedupe keys, attempts, provider ids, sent timestamps, and
   sanitized error text.
 - `auditEvents` records domain events for traceability.
+- `rateLimits` stores scoped throttle buckets for sensitive mutations. Keys are
+  normalized fingerprints or stable ids, not raw bearer credentials.
 
 ## Token Strategy
 
@@ -60,6 +62,20 @@ email sessions. Convex stores only token hashes and fingerprints. API scopes
 grant action families such as meeting creation or availability writes, but
 meeting-specific admin actions also resolve the token owner to an active
 membership with admin capabilities for that meeting.
+
+## Retention and Abuse Controls
+
+Stage 10 adds `maintenance:cleanupRetainedData` for batch-limited retention
+cleanup. It supports dry-run mode and configurable windows. The cleanup deletes
+expired magic links, stale terminal notifications, revoked API credentials,
+stale recovered membership access tokens, expired rate-limit buckets, and old
+fully anonymous meetings. It revokes inactive anonymous non-admin memberships
+with no availability instead of deleting active participant history.
+
+Sensitive write mutations call durable rate-limit helpers before expensive or
+security-sensitive work. Rate-limit keys use normalized email addresses, Convex
+ids, token fingerprints, or token hashes; raw membership tokens, magic-link
+tokens, and API bearer tokens are not persisted in rate-limit rows.
 
 ## Lifecycle and Permissions
 

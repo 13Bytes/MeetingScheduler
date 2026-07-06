@@ -22,6 +22,7 @@ import {
   buildReopenMeetingPatch,
 } from "./domain/finalization";
 import { createSecretToken } from "./domain/tokens";
+import { assertConvexRateLimit } from "./rateLimit";
 import {
   buildMeetingResults,
   canViewerReadDetailedResults,
@@ -44,6 +45,7 @@ import {
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
 const DEV_INTERNAL_IDENTITY_SECRET =
   "dev-only-meeting-scheduler-identity-internal-secret";
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -77,6 +79,12 @@ export const createApiToken = mutation({
     await assertInternalIdentitySecret(args.internalSecret);
     const identity = await ctx.db.get(args.emailIdentityId);
     assertVerifiedEmailIdentity(identity);
+    await assertConvexRateLimit(ctx, {
+      scope: "api_token.create",
+      key: args.emailIdentityId,
+      limit: 20,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
     const scopes = normalizeApiTokenScopes(args.scopes);
     const now = Date.now();
     const apiToken = await createSecretToken("api");
@@ -120,6 +128,12 @@ export const revokeApiToken = mutation({
     if (!token || token.emailIdentityId !== args.emailIdentityId) {
       throw new Error("API token not found");
     }
+    await assertConvexRateLimit(ctx, {
+      scope: "api_token.revoke",
+      key: args.emailIdentityId,
+      limit: 60,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
     if (token.revokedAt !== undefined) {
       return {
         tokenFingerprint: token.tokenFingerprint,
@@ -152,6 +166,7 @@ export const createMeeting = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:create",
     ]);
+    await assertApiMutationRateLimit(ctx, "api.meetings.create", credential);
     const now = Date.now();
     const title = normalizeMeetingTitle(args.title);
     const settings = normalizeMeetingSettings(args.settings);
@@ -286,6 +301,7 @@ export const createParticipant = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "availability:write",
     ]);
+    await assertApiMutationRateLimit(ctx, "api.participants.create", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -363,6 +379,7 @@ export const saveAvailability = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "availability:write",
     ]);
+    await assertApiMutationRateLimit(ctx, "api.availability.save", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -415,6 +432,7 @@ export const finalizeMeeting = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:finalize",
     ]);
+    await assertApiMutationRateLimit(ctx, "api.meetings.finalize", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     const membership = await requireAdminMembershipForCredential(
       ctx,
@@ -475,6 +493,7 @@ export const reopenMeeting = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:finalize",
     ]);
+    await assertApiMutationRateLimit(ctx, "api.meetings.reopen", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     const membership = await requireAdminMembershipForCredential(
       ctx,
@@ -524,6 +543,19 @@ async function requireApiCredential(
   const identity = await ctx.db.get(token.emailIdentityId);
   assertVerifiedEmailIdentity(identity);
   return { token, identity };
+}
+
+async function assertApiMutationRateLimit(
+  ctx: MutationLikeCtx,
+  scope: string,
+  credential: ApiCredential,
+) {
+  await assertConvexRateLimit(ctx, {
+    scope,
+    key: credential.token.tokenFingerprint,
+    limit: 120,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+  });
 }
 
 async function findCredentialMembershipForMeeting(

@@ -40,6 +40,7 @@ import {
 } from "@/lib/participant-availability-painter";
 import { buildAbsoluteAppUrl, routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { getAnonymousClientRateLimitKey } from "@/lib/client-rate-limit-key";
 
 type MeetingSummary = {
   _id?: string;
@@ -140,6 +141,7 @@ export function ConnectedPublicParticipantMeeting({
           meetingSlug: meetingData.meeting.slug,
           displayName,
           privacyMode: "detailed",
+          clientRateLimitKey: getAnonymousClientRateLimitKey(),
         })
       }
       onSaveAvailability={(membershipToken, records) =>
@@ -490,6 +492,9 @@ export function ParticipantAvailabilityPainter({
           description="Responses are read-only until an admin reopens the poll."
         />
       ) : null}
+      <p className="sr-only" aria-live="polite">
+        {`${summary.yes} yes, ${summary.reluctant} reluctant, ${summary.no} no responses selected.`}
+      </p>
 
       {data.results ? (
         <MeetingResultsPanel
@@ -568,6 +573,7 @@ export function ParticipantAvailabilityPainter({
                     className={inputClassName}
                     value={displayName}
                     disabled={!canEdit}
+                    aria-invalid={error?.toLowerCase().includes("display name")}
                     onChange={(event) => setDisplayName(event.target.value)}
                     placeholder="Ada Lovelace"
                   />
@@ -721,7 +727,7 @@ function AvailabilityGrid({
   const columnTemplate = `76px repeat(${visibleDays.length}, minmax(72px, 1fr))`;
   return (
     <div
-      className="max-h-[72vh] overflow-auto"
+      className="max-h-[72vh] touch-pan-x touch-pan-y overflow-auto"
       onPointerLeave={() => {
         if (!disabled) {
           onCancel();
@@ -859,16 +865,23 @@ function AvailabilityCellButton({
   onApplyCell: (cellKey: string) => void;
 }) {
   const displayedResponse = isPreview && mode !== "clear" ? mode : response;
+  const touchStartRef = useRef<{
+    x: number;
+    y: number;
+    moved: boolean;
+  } | null>(null);
+
   return (
     <button
       type="button"
       role="gridcell"
+      data-calendar-cell-key={cell.key}
       disabled={disabled}
       aria-selected={Boolean(response)}
       aria-label={`${cell.dayLabel} ${cell.timeLabel} ${displayedResponse ?? "unset"}`}
       title={`${cell.dayLabel} ${cell.timeLabel}`}
       className={cn(
-        "min-h-8 border-b border-r border-border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed",
+        "min-h-8 touch-manipulation select-none border-b border-r border-border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed",
         responseClassName(displayedResponse),
         !displayedResponse && cell.isWeekend && "bg-slate-50",
         isPreview && mode === "clear" && "bg-slate-200",
@@ -877,8 +890,33 @@ function AvailabilityCellButton({
         if (disabled) {
           return;
         }
+        if (event.pointerType === "touch") {
+          touchStartRef.current = {
+            x: event.clientX,
+            y: event.clientY,
+            moved: false,
+          };
+          return;
+        }
         event.preventDefault();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
         onBegin(cell.key);
+      }}
+      onPointerMove={(event) => {
+        if (disabled || event.buttons !== 1) {
+          return;
+        }
+        const touchStart = touchStartRef.current;
+        if (event.pointerType === "touch" && touchStart) {
+          const deltaX = Math.abs(event.clientX - touchStart.x);
+          const deltaY = Math.abs(event.clientY - touchStart.y);
+          touchStart.moved = touchStart.moved || deltaX > 10 || deltaY > 10;
+          return;
+        }
+        const targetCellKey = getPointerTargetCellKey(event);
+        if (targetCellKey && targetCellKey !== cell.key) {
+          onHover(targetCellKey);
+        }
       }}
       onPointerEnter={(event) => {
         if (!disabled && event.buttons === 1) {
@@ -886,10 +924,19 @@ function AvailabilityCellButton({
         }
       }}
       onPointerUp={() => {
-        if (!disabled) {
-          onCommittedEdit();
-          onCommit();
+        if (disabled) {
+          return;
         }
+        const touchStart = touchStartRef.current;
+        if (touchStart) {
+          if (!touchStart.moved) {
+            onApplyCell(cell.key);
+          }
+          touchStartRef.current = null;
+          return;
+        }
+        onCommittedEdit();
+        onCommit();
       }}
       onKeyDown={(event) => {
         if (disabled || (event.key !== "Enter" && event.key !== " ")) {
@@ -900,6 +947,12 @@ function AvailabilityCellButton({
       }}
     />
   );
+}
+
+function getPointerTargetCellKey(event: React.PointerEvent<HTMLElement>) {
+  const target = document.elementFromPoint(event.clientX, event.clientY);
+  return target?.closest<HTMLElement>("[data-calendar-cell-key]")?.dataset
+    .calendarCellKey;
 }
 
 function AvailabilityBrushControls({
@@ -1000,6 +1053,7 @@ function StatusMessage({
           : "border-teal-200 bg-teal-50 text-teal-950",
       )}
       role={tone === "error" ? "alert" : "status"}
+      aria-live={tone === "error" ? "assertive" : "polite"}
     >
       {children}
     </div>

@@ -1,3 +1,5 @@
+import { redactSecrets } from "@/lib/security-redaction";
+
 export const notificationDeliveryLeaseMs = 15 * 60 * 1000;
 export const maxNotificationAttempts = 5;
 
@@ -19,7 +21,7 @@ export function normalizeDeliveryError(error: unknown): string {
       : typeof error === "string"
         ? error
         : (extractObjectErrorMessage(error) ?? "Email delivery failed");
-  return message.slice(0, 500);
+  return redactSecrets(message).slice(0, 500);
 }
 
 function extractObjectErrorMessage(error: unknown): string | undefined {

@@ -9,6 +9,7 @@ import {
   identitySessionCookieName,
   verifyEmailIdentitySession,
 } from "@/lib/identity-session";
+import { safeErrorMessage } from "@/lib/security-redaction";
 
 export async function GET(request: NextRequest) {
   const session = verifyEmailIdentitySession(
@@ -40,7 +41,10 @@ export async function GET(request: NextRequest) {
       expiresAt: session.expiresAt,
     });
   } catch (caughtError) {
-    console.error("Failed to resolve email identity session", caughtError);
+    console.error(
+      "Failed to resolve email identity session",
+      safeErrorMessage(caughtError, "session resolution failed"),
+    );
     return NextResponse.json(
       { signedIn: false, error: "Unable to verify this email session." },
       { status: 503 },

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
+import { resetInMemoryRateLimitsForTest } from "@/lib/rate-limit";
 
 const { mutationMock, sendMock } = vi.hoisted(() => ({
   mutationMock: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("@/lib/email/adapter", () => ({
 
 describe("identity verification email request route", () => {
   beforeEach(() => {
+    resetInMemoryRateLimitsForTest();
     vi.unstubAllEnvs();
     mutationMock.mockReset();
     sendMock.mockReset();

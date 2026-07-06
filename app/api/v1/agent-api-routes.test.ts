@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetInMemoryRateLimitsForTest } from "@/lib/rate-limit";
 import { POST as createMeeting } from "./meetings/route";
 import { GET as readMeeting } from "./meetings/[slug]/route";
 import { GET as readRecommendations } from "./meetings/[slug]/recommendations/route";
@@ -54,6 +55,7 @@ vi.mock("@/lib/identity-session", () => ({
 
 describe("agent API routes", () => {
   beforeEach(() => {
+    resetInMemoryRateLimitsForTest();
     mutationMock.mockReset();
     queryMock.mockReset();
     getIdentitySessionSecretMock.mockReset();

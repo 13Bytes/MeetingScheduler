@@ -27,6 +27,7 @@ type CreateMeetingArgs = {
   title: string;
   description?: string;
   creatorEmail?: string;
+  clientRateLimitKey?: string;
   creatorPrivacyMode: PrivacyMode;
   adminMode: AdminMode;
   settings: {

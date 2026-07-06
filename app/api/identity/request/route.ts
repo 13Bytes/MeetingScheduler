@@ -5,9 +5,24 @@ import { createEmailDeliveryAdapter, getConfiguredEmailFrom } from "@/lib/email/
 import { normalizeDeliveryError } from "@/lib/email/outbox";
 import { renderPasswordlessEmail } from "@/lib/email/templates";
 import { getConvexUrl, getInternalIdentitySecret } from "@/lib/identity-internal";
+import {
+  enforceRequestRateLimit,
+  getClientIp,
+  hashRateLimitKey,
+  RateLimitError,
+  rateLimitErrorResponse,
+} from "@/lib/rate-limit";
+import { safeErrorMessage } from "@/lib/security-redaction";
 
 export async function POST(request: Request) {
   try {
+    await enforceRequestRateLimit({
+      request,
+      scope: "identity.request.ip",
+      key: getClientIp(request),
+      limit: 10,
+      windowMs: 10 * 60 * 1000,
+    });
     const body = (await request.json()) as {
       email?: string;
       displayName?: string;
@@ -15,6 +30,13 @@ export async function POST(request: Request) {
     if (!body.email) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
+    await enforceRequestRateLimit({
+      request,
+      scope: "identity.request.email",
+      key: await hashRateLimitKey(body.email),
+      limit: 3,
+      windowMs: 15 * 60 * 1000,
+    });
 
     const origin = getAppOrigin(request);
     const convex = new ConvexHttpClient(getConvexUrl());
@@ -71,7 +93,10 @@ export async function POST(request: Request) {
         providerMessageId: delivery.providerMessageId,
       });
     } catch (statusError) {
-      console.error("Failed to mark verification email sent", statusError);
+      console.error(
+        "Failed to mark verification email sent",
+        safeErrorMessage(statusError, "status update failed"),
+      );
     }
 
     return NextResponse.json({
@@ -81,12 +106,15 @@ export async function POST(request: Request) {
       devMagicLinkUrl,
     });
   } catch (caughtError) {
+    if (caughtError instanceof RateLimitError) {
+      return rateLimitErrorResponse(caughtError);
+    }
     return NextResponse.json(
       {
-        error:
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Unable to request an email verification link.",
+        error: safeErrorMessage(
+          caughtError,
+          "Unable to request an email verification link.",
+        ),
       },
       { status: 400 },
     );

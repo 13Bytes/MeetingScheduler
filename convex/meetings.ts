@@ -34,7 +34,12 @@ import {
   buildReopenMeetingPatch,
   shouldAttemptNotificationDelivery,
 } from "./domain/finalization";
-import { createSecretToken, hashSecretToken } from "./domain/tokens";
+import {
+  createSecretToken,
+  hashSecretToken,
+  tokenFingerprintFromHash,
+} from "./domain/tokens";
+import { assertConvexRateLimit } from "./rateLimit";
 import {
   buildMeetingResults,
   canViewerReadDetailedResults,
@@ -54,6 +59,7 @@ const DEV_INTERNAL_IDENTITY_SECRET =
 const EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS = 5 * 60 * 1000;
 const NOTIFICATION_DELIVERY_LEASE_MS = 15 * 60 * 1000;
 const MAX_NOTIFICATION_ATTEMPTS = 5;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -78,6 +84,7 @@ export const createMeeting = mutation({
     description: v.optional(v.string()),
     creatorName: v.optional(v.string()),
     creatorEmail: v.optional(v.string()),
+    clientRateLimitKey: v.optional(v.string()),
     creatorPrivacyMode: v.optional(privacyModeValidator),
     adminMode: v.optional(adminModeValidator),
     settings: v.optional(v.object(meetingSettingsArgs)),
@@ -86,6 +93,24 @@ export const createMeeting = mutation({
     const now = Date.now();
     const title = normalizeMeetingTitle(args.title);
     const settings = normalizeMeetingSettings(args.settings);
+    await assertConvexRateLimit(ctx, {
+      scope: "meeting.create",
+      key: args.creatorEmail
+        ? normalizeEmailAddress(args.creatorEmail)
+        : slugifyMeetingTitle(args.slug ?? title),
+      limit: 8,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+    if (args.clientRateLimitKey) {
+      await assertConvexRateLimit(ctx, {
+        scope: "meeting.create.client",
+        key: args.clientRateLimitKey,
+        limit: 8,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+        now,
+      });
+    }
     if (settings.allowedTimeRanges.length === 0) {
       throw new Error("Meeting creation requires at least one allowed time range");
     }
@@ -278,12 +303,29 @@ export const createMembership = mutation({
     role: v.optional(membershipRoleValidator),
     privacyMode: v.optional(privacyModeValidator),
     createdByMembershipToken: v.optional(v.string()),
+    clientRateLimitKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
     if (!meeting) {
       throw new Error("Meeting not found");
+    }
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.create",
+      key: meeting.slug,
+      limit: 300,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+    if (args.clientRateLimitKey) {
+      await assertConvexRateLimit(ctx, {
+        scope: "membership.create.client",
+        key: `${meeting.slug}:${args.clientRateLimitKey}`,
+        limit: 60,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+        now,
+      });
     }
 
     if (meeting.lifecycleState !== "open") {
@@ -343,12 +385,29 @@ export const createParticipantMembership = mutation({
     meetingSlug: v.string(),
     displayName: v.string(),
     privacyMode: v.optional(privacyModeValidator),
+    clientRateLimitKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
     if (!meeting) {
       throw new Error("Meeting not found");
+    }
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.public_create",
+      key: meeting.slug,
+      limit: 300,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+    if (args.clientRateLimitKey) {
+      await assertConvexRateLimit(ctx, {
+        scope: "membership.public_create.client",
+        key: `${meeting.slug}:${args.clientRateLimitKey}`,
+        limit: 60,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+        now,
+      });
     }
 
     if (meeting.lifecycleState !== "open") {
@@ -394,6 +453,13 @@ export const updateMembershipDisplayName = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.update_name",
+      key: membership._id,
+      limit: 30,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const meeting = await requireMeeting(ctx, membership.meetingId);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -429,6 +495,13 @@ export const updateMeetingSettings = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "meeting.update_settings",
+      key: membership._id,
+      limit: 30,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const meeting = await requireMeeting(ctx, membership.meetingId);
     assertCanEditOpenMeeting(meeting, membership);
 
@@ -486,6 +559,13 @@ export const finalizeMeeting = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "meeting.finalize",
+      key: membership._id,
+      limit: 20,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const meeting = await requireMeeting(ctx, membership.meetingId);
     const nextLifecycleState = transitionMeetingLifecycle(
       meeting,
@@ -539,6 +619,13 @@ export const reopenMeeting = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "meeting.reopen",
+      key: membership._id,
+      limit: 20,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const meeting = await requireMeeting(ctx, membership.meetingId);
     const nextLifecycleState = transitionMeetingLifecycle(meeting, membership, "reopen");
     const meetingPatch = buildReopenMeetingPatch({
@@ -877,6 +964,13 @@ export const upsertAvailabilityRecord = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "availability.single_save",
+      key: membership._id,
+      limit: 180,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const meeting = await requireMeeting(ctx, membership.meetingId);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -952,6 +1046,12 @@ export const saveAvailabilityRecords = mutation({
   },
   handler: async (ctx, args) => {
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "availability.batch_save",
+      key: membership._id,
+      limit: 120,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
     const meeting = await requireMeeting(ctx, membership.meetingId);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -1039,6 +1139,13 @@ export const consumeMagicLink = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const tokenHash = await hashSecretToken(args.magicLinkToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "magic_link.consume",
+      key: tokenFingerprintFromHash(tokenHash),
+      limit: 10,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const magicLink = await ctx.db
       .query("magicLinks")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
@@ -1067,6 +1174,13 @@ export const completeEmailVerification = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const tokenHash = await hashSecretToken(args.magicLinkToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "magic_link.verify",
+      key: tokenFingerprintFromHash(tokenHash),
+      limit: 10,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const magicLink = await ctx.db
       .query("magicLinks")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
@@ -1107,6 +1221,14 @@ export const attachVerifiedEmailIdentityToMembership = mutation({
     const now = Date.now();
     const identity = await ctx.db.get(args.emailIdentityId);
     assertVerifiedEmailIdentity(identity);
+    const membershipTokenHash = await hashSecretToken(args.membershipToken);
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.attach_email",
+      key: `${args.emailIdentityId}:${tokenFingerprintFromHash(membershipTokenHash)}`,
+      limit: 20,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
 
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
     assertCanAttachEmailIdentityToMembership({
@@ -1264,6 +1386,13 @@ export const createRecoveredMembershipLink = mutation({
   handler: async (ctx, args) => {
     assertInternalIdentitySecret(args.internalSecret);
     const now = Date.now();
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.recovery",
+      key: args.emailIdentityId,
+      limit: 20,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
     const identity = await ctx.db.get(args.emailIdentityId);
     assertVerifiedEmailIdentity(identity);
     const membership = await ctx.db.get(args.membershipId);
@@ -1580,6 +1709,13 @@ async function createEmailVerificationMagicLink(
   const now = Date.now();
   const expiresAt = normalizeMagicLinkExpiry({ now });
   const normalizedEmail = normalizeEmailAddress(args.email);
+  await assertConvexRateLimit(ctx, {
+    scope: "magic_link.email",
+    key: normalizedEmail,
+    limit: 3,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    now,
+  });
   const emailIdentityId = await upsertEmailIdentity(
     ctx,
     args.email,
