@@ -13,7 +13,10 @@ type Bucket = {
   resetAt: number;
 };
 
+// This lightweight proxy limiter is instance-local and best-effort. Durable
+// Convex mutation limits protect the sensitive write paths.
 const buckets = new Map<string, Bucket>();
+let lastPrunedAt = 0;
 
 export class RateLimitError extends Error {
   constructor(public readonly check: RateLimitCheck) {
@@ -106,9 +109,14 @@ export function rateLimitErrorResponse(error: RateLimitError) {
 
 export function resetInMemoryRateLimitsForTest(): void {
   buckets.clear();
+  lastPrunedAt = 0;
 }
 
 function pruneExpiredBuckets(now: number): void {
+  if (now - lastPrunedAt < 60 * 1000) {
+    return;
+  }
+  lastPrunedAt = now;
   for (const [key, bucket] of buckets) {
     if (bucket.resetAt <= now) {
       buckets.delete(key);

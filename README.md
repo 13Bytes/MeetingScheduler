@@ -364,6 +364,9 @@ Stage 10 adds practical abuse controls and operational maintenance:
 
 - Next.js proxy limits public meeting links, membership links, and API routes by
   client address when traffic passes through the Next.js runtime.
+- Keep the pinned `next` version current with security backports and review
+  recent proxy/middleware advisories before deployment, because proxy throttling
+  is only meaningful when that layer is patched.
 - Sensitive route handlers also apply focused limits by email, identity, bearer
   token hash, or membership token hash.
 - Convex mutations maintain durable best-effort write throttles for meeting

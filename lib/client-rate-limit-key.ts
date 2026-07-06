@@ -1,6 +1,7 @@
 "use client";
 
 const storageKey = "meeting-scheduler:anonymous-rate-limit-key:v1";
+let ephemeralKey: string | undefined;
 
 export function getAnonymousClientRateLimitKey(): string {
   try {
@@ -12,7 +13,8 @@ export function getAnonymousClientRateLimitKey(): string {
     window.localStorage.setItem(storageKey, nextKey);
     return nextKey;
   } catch {
-    return "storage-unavailable";
+    ephemeralKey ??= createClientKey();
+    return ephemeralKey;
   }
 }
 

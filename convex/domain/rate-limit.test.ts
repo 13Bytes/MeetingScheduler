@@ -19,6 +19,23 @@ describe("durable rate-limit helpers", () => {
     });
   });
 
+  it("increments instead of resetting when existing window starts at the same millisecond", () => {
+    expect(
+      evaluateDurableRateLimit({
+        existing: { count: 1, windowStartedAt: 1_000 },
+        limit: 2,
+        now: 1_000,
+        windowMs: 60_000,
+      }),
+    ).toEqual({
+      allowed: true,
+      count: 2,
+      windowStartedAt: 1_000,
+      expiresAt: 61_000,
+      retryAfterMs: undefined,
+    });
+  });
+
   it("normalizes untrusted keys before persistence", () => {
     expect(normalizeDurableRateLimitKey("  Ada@Example.COM  ")).toBe("ada@example.com");
     expect(normalizeDurableRateLimitKey("")).toBe("unknown");

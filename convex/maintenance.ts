@@ -30,10 +30,10 @@ export const cleanupRetainedData = mutation({
     windows: retentionWindowArgs,
   },
   handler: async (ctx, args) => {
-    assertInternalIdentitySecret(args.internalSecret);
+    await assertInternalIdentitySecret(args.internalSecret);
     const now = args.now ?? Date.now();
     const dryRun = args.dryRun ?? true;
-    const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
     const cutoffs = buildRetentionCutoffs(now, args.windows ?? {});
     const summary = {
       dryRun,
@@ -90,7 +90,7 @@ export const cleanupRetainedData = mutation({
       .withIndex("by_updated_at", (q) =>
         q.lte("updatedAt", cutoffs.inactiveMembershipBefore),
       )
-      .take(limit * 3);
+      .take(limit);
     for (const membership of memberships) {
       const availability = await ctx.db
         .query("availabilityRecords")
@@ -123,7 +123,7 @@ export const cleanupRetainedData = mutation({
     for (const token of await ctx.db
       .query("apiTokens")
       .withIndex("by_revoked_at", (q) =>
-        q.lte("revokedAt", cutoffs.revokedCredentialBefore),
+        q.gt("revokedAt", 0).lte("revokedAt", cutoffs.revokedCredentialBefore),
       )
       .take(limit)) {
       summary.revokedApiTokens += 1;
@@ -135,7 +135,7 @@ export const cleanupRetainedData = mutation({
     for (const token of await ctx.db
       .query("membershipAccessTokens")
       .withIndex("by_revoked_at", (q) =>
-        q.lte("revokedAt", cutoffs.revokedCredentialBefore),
+        q.gt("revokedAt", 0).lte("revokedAt", cutoffs.revokedCredentialBefore),
       )
       .take(limit)) {
       summary.staleMembershipAccessTokens += 1;
@@ -176,7 +176,7 @@ export const cleanupRetainedData = mutation({
       .withIndex("by_created_at", (q) =>
         q.lte("createdAt", cutoffs.anonymousMeetingBefore),
       )
-      .take(limit * 2)) {
+      .take(Math.min(limit, 25))) {
       const meetingMemberships = await ctx.db
         .query("memberships")
         .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
@@ -287,9 +287,29 @@ async function countOrDeleteAnonymousMeeting(
   await ctx.db.delete(meeting._id);
 }
 
-function assertInternalIdentitySecret(providedSecret: string): void {
+async function assertInternalIdentitySecret(providedSecret: string): Promise<void> {
   const expectedSecret = process.env[INTERNAL_IDENTITY_SECRET_ENV];
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+  if (
+    !expectedSecret ||
+    !(await constantTimeEqualString(providedSecret, expectedSecret))
+  ) {
     throw new Error("Internal maintenance authorization failed");
   }
+}
+
+async function constantTimeEqualString(left: string, right: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length, 1);
+  const paddedLeft = new Uint8Array(maxLength);
+  const paddedRight = new Uint8Array(maxLength);
+  paddedLeft.set(leftBytes.slice(0, maxLength));
+  paddedRight.set(rightBytes.slice(0, maxLength));
+
+  let diff = leftBytes.length ^ rightBytes.length;
+  for (let index = 0; index < maxLength; index += 1) {
+    diff |= paddedLeft[index] ^ paddedRight[index];
+  }
+  return diff === 0;
 }

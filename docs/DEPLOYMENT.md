@@ -67,7 +67,7 @@ Run retention cleanup daily. Start with dry-run output, then run with
 npx convex run maintenance:cleanupRetainedData '{
   "internalSecret": "...",
   "dryRun": true,
-  "limit": 100
+  "limit": 50
 }'
 ```
 

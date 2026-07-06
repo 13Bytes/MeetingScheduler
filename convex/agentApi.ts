@@ -166,7 +166,6 @@ export const createMeeting = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:create",
     ]);
-    await assertApiMutationRateLimit(ctx, "api.meetings.create", credential);
     const now = Date.now();
     const title = normalizeMeetingTitle(args.title);
     const settings = normalizeMeetingSettings(args.settings);
@@ -187,6 +186,7 @@ export const createMeeting = mutation({
     if (existingMeeting) {
       throw new Error("A meeting with this slug already exists");
     }
+    await assertApiMutationRateLimit(ctx, "api.meetings.create", credential);
 
     const meetingId = await ctx.db.insert("meetings", {
       title,
@@ -301,7 +301,6 @@ export const createParticipant = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "availability:write",
     ]);
-    await assertApiMutationRateLimit(ctx, "api.participants.create", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -327,6 +326,7 @@ export const createParticipant = mutation({
         role: existingMembership.role,
       };
     }
+    await assertApiMutationRateLimit(ctx, "api.participants.create", credential);
 
     const membershipToken = await createSecretToken("membership");
     const membershipId = await ctx.db.insert("memberships", {
@@ -379,7 +379,6 @@ export const saveAvailability = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "availability:write",
     ]);
-    await assertApiMutationRateLimit(ctx, "api.availability.save", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     if (meeting.lifecycleState !== "open") {
       throw new Error("Finalized meetings are read-only until reopened");
@@ -390,6 +389,7 @@ export const saveAvailability = mutation({
       meetingId: meeting._id,
     });
     dedupeAvailabilityRecordBatch(args.records);
+    await assertApiMutationRateLimit(ctx, "api.availability.save", credential);
     const savedRecordIds: Id<"availabilityRecords">[] = [];
     const clearedCellKeys: string[] = [];
     for (const record of args.records) {
@@ -432,7 +432,6 @@ export const finalizeMeeting = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:finalize",
     ]);
-    await assertApiMutationRateLimit(ctx, "api.meetings.finalize", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     const membership = await requireAdminMembershipForCredential(
       ctx,
@@ -452,6 +451,7 @@ export const finalizeMeeting = mutation({
       finalizedByMembershipId: membership._id,
       finalizedSlot,
     });
+    await assertApiMutationRateLimit(ctx, "api.meetings.finalize", credential);
     await ctx.db.patch(meeting._id, {
       ...meetingPatch,
       lifecycleState: nextLifecycleState,
@@ -493,7 +493,6 @@ export const reopenMeeting = mutation({
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:finalize",
     ]);
-    await assertApiMutationRateLimit(ctx, "api.meetings.reopen", credential);
     const meeting = await requireMeetingBySlug(ctx, args.meetingSlug);
     const membership = await requireAdminMembershipForCredential(
       ctx,
@@ -507,6 +506,7 @@ export const reopenMeeting = mutation({
       reopenedAt: now,
       reopenedByMembershipId: membership._id,
     });
+    await assertApiMutationRateLimit(ctx, "api.meetings.reopen", credential);
     await ctx.db.patch(meeting._id, {
       ...meetingPatch,
       lifecycleState: nextLifecycleState,

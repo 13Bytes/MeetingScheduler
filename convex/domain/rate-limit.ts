@@ -18,11 +18,10 @@ export function evaluateDurableRateLimit(args: {
   windowMs: number;
 }): DurableRateLimitDecision {
   const existing = args.existing;
-  const windowStartedAt =
-    !existing || existing.windowStartedAt + args.windowMs <= args.now
-      ? args.now
-      : existing.windowStartedAt;
-  const count = windowStartedAt === args.now ? 1 : existing!.count + 1;
+  const startsNewWindow =
+    !existing || existing.windowStartedAt + args.windowMs <= args.now;
+  const windowStartedAt = startsNewWindow ? args.now : existing.windowStartedAt;
+  const count = startsNewWindow ? 1 : existing.count + 1;
   const expiresAt = windowStartedAt + args.windowMs;
   const allowed = count <= args.limit;
 

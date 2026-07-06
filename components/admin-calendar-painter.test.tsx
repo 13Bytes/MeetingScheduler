@@ -135,6 +135,93 @@ describe("AdminCalendarPainter", () => {
     ]);
   });
 
+  it("lets touch users tap a cell without starting drag painting", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AdminCalendarPainter
+        data={{
+          ...editableData,
+          meeting: {
+            ...editableData.meeting,
+            durationMinutes: 30,
+            allowedTimeRanges: [],
+          },
+        }}
+        onSave={onSave}
+        baseDate={new Date("2026-06-24T12:00:00.000Z")}
+      />,
+    );
+
+    const cell = screen.getByRole("gridcell", {
+      name: /wed jun 24 09:00 blocked/i,
+    });
+    fireEvent.pointerDown(cell, {
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerUp(cell, {
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save allowed regions/i }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith([
+      expect.objectContaining({
+        startUtc: "2026-06-24T07:00:00.000Z",
+        endUtc: "2026-06-24T07:30:00.000Z",
+      }),
+    ]);
+  });
+
+  it("does not paint when a touch gesture moves like a scroll", () => {
+    render(
+      <AdminCalendarPainter
+        data={{
+          ...editableData,
+          meeting: {
+            ...editableData.meeting,
+            durationMinutes: 30,
+            allowedTimeRanges: [],
+          },
+        }}
+        onSave={vi.fn()}
+        baseDate={new Date("2026-06-24T12:00:00.000Z")}
+      />,
+    );
+
+    const cell = screen.getByRole("gridcell", {
+      name: /wed jun 24 09:00 blocked/i,
+    });
+    fireEvent.pointerDown(cell, {
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerMove(cell, {
+      pointerType: "touch",
+      pointerId: 1,
+      buttons: 1,
+      clientX: 10,
+      clientY: 40,
+    });
+    fireEvent.pointerUp(cell, {
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 10,
+      clientY: 40,
+    });
+
+    expect(
+      screen.getByRole("gridcell", { name: /wed jun 24 09:00 blocked/i }),
+    ).toBeInTheDocument();
+  });
+
   it("drag-paints across neighboring cells in the rendered grid", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(

@@ -18,6 +18,16 @@ describe("retention policy helpers", () => {
     });
   });
 
+  it("allows explicit zero retention windows for immediate cleanup", () => {
+    expect(
+      buildRetentionCutoffs(1_000_000, {
+        expiredMagicLinkMs: 0,
+      }),
+    ).toMatchObject({
+      expiredMagicLinkBefore: 1_000_000,
+    });
+  });
+
   it("only retires inactive anonymous non-admin memberships with no availability", () => {
     expect(
       shouldRetireInactiveMembership({
@@ -40,6 +50,23 @@ describe("retention policy helpers", () => {
         role: "member",
         emailIdentityId: "email-1",
         updatedAt: 1_000,
+        hasAvailability: false,
+        cutoff: 2_000,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetireInactiveMembership({
+        role: "member",
+        updatedAt: 1_000,
+        hasAvailability: true,
+        cutoff: 2_000,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetireInactiveMembership({
+        role: "member",
+        updatedAt: 1_000,
+        tokenLastUsedAt: 2_500,
         hasAvailability: false,
         cutoff: 2_000,
       }),

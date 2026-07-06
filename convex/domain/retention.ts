@@ -96,5 +96,8 @@ export function shouldRetireInactiveMembership(args: {
 }
 
 function positiveOrDefault(value: number | undefined, fallback: number): number {
-  return value && Number.isFinite(value) && value > 0 ? value : fallback;
+  if (value === undefined || !Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return value;
 }
