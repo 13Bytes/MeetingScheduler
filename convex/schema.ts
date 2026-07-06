@@ -37,7 +37,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
-    .index("by_lifecycle_state", ["lifecycleState"]),
+    .index("by_lifecycle_state", ["lifecycleState"])
+    .index("by_created_at", ["createdAt"]),
 
   memberships: defineTable({
     meetingId: v.id("meetings"),
@@ -54,7 +55,8 @@ export default defineSchema({
     .index("by_meeting", ["meetingId"])
     .index("by_meeting_role", ["meetingId", "role"])
     .index("by_email_identity", ["emailIdentityId"])
-    .index("by_token_hash", ["tokenHash"]),
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_updated_at", ["updatedAt"]),
 
   membershipAccessTokens: defineTable({
     membershipId: v.id("memberships"),
@@ -65,7 +67,9 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_membership", ["membershipId"])
-    .index("by_token_hash", ["tokenHash"]),
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_created_at", ["createdAt"])
+    .index("by_revoked_at", ["revokedAt"]),
 
   allowedTimeRanges: defineTable({
     meetingId: v.id("meetings"),
@@ -132,7 +136,8 @@ export default defineSchema({
   })
     .index("by_email_identity", ["emailIdentityId"])
     .index("by_token_hash", ["tokenHash"])
-    .index("by_token_fingerprint", ["tokenFingerprint"]),
+    .index("by_token_fingerprint", ["tokenFingerprint"])
+    .index("by_revoked_at", ["revokedAt"]),
 
   notificationOutbox: defineTable({
     meetingId: v.optional(v.id("meetings")),
@@ -152,6 +157,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
+    .index("by_status_updated", ["status", "updatedAt"])
     .index("by_meeting", ["meetingId"])
     .index("by_dedupe_key", ["dedupeKey"]),
 
@@ -165,4 +171,15 @@ export default defineSchema({
   })
     .index("by_meeting", ["meetingId"])
     .index("by_actor_membership", ["actorMembershipId"]),
+
+  rateLimits: defineTable({
+    scope: v.string(),
+    key: v.string(),
+    count: v.number(),
+    windowStartedAt: v.number(),
+    expiresAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_scope_key", ["scope", "key"])
+    .index("by_expiration", ["expiresAt"]),
 });

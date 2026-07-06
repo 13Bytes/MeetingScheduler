@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import type React from "react";
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { AllowedTimeRangeDraft } from "@/lib/meeting-presets";
 import {
@@ -245,6 +245,9 @@ export function AdminCalendarPainter({
           description="Finalized polls are read-only until an admin reopens them."
         />
       ) : null}
+      <p className="sr-only" aria-live="polite">
+        {`${paintedCellCount} allowed cells selected.`}
+      </p>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="overflow-hidden">
@@ -414,7 +417,7 @@ function CalendarPaintGrid({
   const columnTemplate = `76px repeat(${grid.days.length}, minmax(64px, 1fr))`;
   return (
     <div
-      className="max-h-[72vh] overflow-auto"
+      className="max-h-[72vh] touch-pan-x touch-pan-y overflow-auto"
       onPointerLeave={() => {
         if (!disabled) {
           onCancel();
@@ -543,16 +546,25 @@ function CalendarCellButton({
 }) {
   const previewClass =
     mode === "block" ? "bg-rose-200" : mode === "preview" ? "bg-sky-200" : "bg-teal-200";
+  const touchStartRef = useRef<{
+    x: number;
+    y: number;
+    moved: boolean;
+  } | null>(null);
+
   return (
     <button
       type="button"
       role="gridcell"
+      data-calendar-cell-key={cell.key}
       disabled={disabled}
       aria-selected={isAllowed}
-      aria-label={`${cell.dayLabel} ${cell.timeLabel}`}
+      aria-label={`${cell.dayLabel} ${cell.timeLabel} ${
+        isAllowed ? "allowed" : "blocked"
+      }`}
       title={`${cell.dayLabel} ${cell.timeLabel}`}
       className={cn(
-        "min-h-7 border-b border-r border-border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed",
+        "min-h-7 touch-manipulation select-none border-b border-r border-border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed",
         isAllowed ? "bg-teal-500 hover:bg-teal-600" : "bg-surface hover:bg-blue-50",
         cell.isWeekend && !isAllowed && "bg-slate-50",
         isPreview && previewClass,
@@ -561,8 +573,33 @@ function CalendarCellButton({
         if (disabled) {
           return;
         }
+        if (event.pointerType === "touch") {
+          touchStartRef.current = {
+            x: event.clientX,
+            y: event.clientY,
+            moved: false,
+          };
+          return;
+        }
         event.preventDefault();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
         onBegin(cell.key);
+      }}
+      onPointerMove={(event) => {
+        if (disabled || event.buttons !== 1) {
+          return;
+        }
+        const touchStart = touchStartRef.current;
+        if (event.pointerType === "touch" && touchStart) {
+          const deltaX = Math.abs(event.clientX - touchStart.x);
+          const deltaY = Math.abs(event.clientY - touchStart.y);
+          touchStart.moved = touchStart.moved || deltaX > 10 || deltaY > 10;
+          return;
+        }
+        const targetCellKey = getPointerTargetCellKey(event);
+        if (targetCellKey && targetCellKey !== cell.key) {
+          onHover(targetCellKey);
+        }
       }}
       onPointerEnter={(event) => {
         if (!disabled && event.buttons === 1) {
@@ -570,9 +607,18 @@ function CalendarCellButton({
         }
       }}
       onPointerUp={() => {
-        if (!disabled) {
-          onCommit();
+        if (disabled) {
+          return;
         }
+        const touchStart = touchStartRef.current;
+        if (touchStart) {
+          if (!touchStart.moved) {
+            onApplyCell(cell.key);
+          }
+          touchStartRef.current = null;
+          return;
+        }
+        onCommit();
       }}
       onKeyDown={(event) => {
         if (disabled || (event.key !== "Enter" && event.key !== " ")) {
@@ -583,6 +629,12 @@ function CalendarCellButton({
       }}
     />
   );
+}
+
+function getPointerTargetCellKey(event: React.PointerEvent<HTMLElement>) {
+  const target = document.elementFromPoint(event.clientX, event.clientY);
+  return target?.closest<HTMLElement>("[data-calendar-cell-key]")?.dataset
+    .calendarCellKey;
 }
 
 function BrushControls({
@@ -662,6 +714,7 @@ function StatusMessage({
           : "border-teal-200 bg-teal-50 text-teal-950",
       )}
       role={tone === "error" ? "alert" : "status"}
+      aria-live={tone === "error" ? "assertive" : "polite"}
     >
       {children}
     </div>

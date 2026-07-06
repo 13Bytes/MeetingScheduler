@@ -1,11 +1,12 @@
 # Meeting Scheduler
 
-A Stage 8 foundation for a Doodle-style collaborative scheduling app. The app is
+A Stage 10 foundation for a Doodle-style collaborative scheduling app. The app is
 set up as a deployable Next.js + TypeScript project with Convex for the realtime
 backend layer, a typed domain model, Tailwind-based UI primitives, an anonymous
-meeting creation flow, an admin calendar constraint painter, and participant
-availability painting with live result recommendations, admin finalization, and
-optional passwordless email recovery, and transactional email notifications.
+meeting creation flow, an admin calendar constraint painter, participant
+availability painting with live result recommendations, admin finalization,
+optional passwordless email recovery, transactional email notifications, a
+scoped agent API, and production hardening guardrails.
 
 ## Stack
 
@@ -25,7 +26,9 @@ admin-allowed cells. Stage 5 adds realtime candidate scoring, recommendation
 ranking, and privacy-aware result display. Stage 6 adds admin final selection,
 selected-slot display, and reopening. Stage 7 adds optional passwordless email
 identity for recovery. Stage 8 adds transactional email delivery for
-passwordless verification and meeting lifecycle notifications.
+passwordless verification and meeting lifecycle notifications. Stage 9 adds the
+agent API. Stage 10 adds retention, abuse controls, accessibility and mobile
+hardening, security review fixes, and deployment/operations documentation.
 
 Core Convex tables:
 
@@ -45,6 +48,7 @@ Core Convex tables:
 - `notificationOutbox`: retryable email delivery records with dedupe keys,
   attempts, provider status, sent timestamps, and delivery errors.
 - `auditEvents`: append-only domain events for lifecycle and membership changes.
+- `rateLimits`: durable throttle buckets for sensitive Convex write paths.
 
 Key invariants:
 
@@ -354,11 +358,38 @@ The machine-readable API description is served from `/api/v1/openapi.json`.
 Developer examples for creating polls, reading state, submitting availability,
 reading recommendations, and finalizing meetings are in `docs/API.md`.
 
+## Production Hardening
+
+Stage 10 adds practical abuse controls and operational maintenance:
+
+- Next.js proxy limits public meeting links, membership links, and API routes by
+  client address when traffic passes through the Next.js runtime.
+- Keep the pinned `next` version current with security backports and review
+  recent proxy/middleware advisories before deployment, because proxy throttling
+  is only meaningful when that layer is patched.
+- Sensitive route handlers also apply focused limits by email, identity, bearer
+  token hash, or membership token hash.
+- Convex mutations maintain durable best-effort write throttles for meeting
+  creation, membership creation, passwordless email requests, magic-link
+  consumption, API token lifecycle, finalization, reopening, settings writes,
+  and availability writes. Anonymous browser writes also include a local client
+  key; large deployments should add provider or edge rate limits because
+  anonymous clients can still rotate local state.
+- Retention cleanup is available through
+  `maintenance:cleanupRetainedData`, with dry-run mode and configurable windows
+  for anonymous meetings, inactive memberships, expired magic links, revoked
+  credentials, stale notifications, and expired rate-limit buckets.
+- Error envelopes and delivery errors redact bearer credentials, raw membership
+  tokens, magic-link tokens, API tokens, token hashes, and provider API keys.
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the production checklist,
+maintenance commands, monitoring hooks, and backup/recovery guidance.
+
 ## Stage Boundaries
 
-Stage 9 intentionally keeps the agent API focused on authenticated poll
-management. It does not implement webhook verification, provider-specific bounce
-handling, or a notification management console. Passwordless identity is
-recovery and API-token ownership only: accounts are not required, passwords do
-not exist, and membership secret links remain the primary direct access
-credential for normal web users.
+Stage 10 intentionally stays within hardening and deployment readiness. It does
+not add account requirements, webhook verification, provider-specific bounce
+handling, a notification management console, or a new feature stage.
+Passwordless identity is recovery and API-token ownership only: accounts are
+not required, passwords do not exist, and membership secret links remain the
+primary direct access credential for normal web users.

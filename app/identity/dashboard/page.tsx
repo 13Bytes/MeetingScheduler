@@ -17,8 +17,26 @@ import {
   verifyEmailIdentitySession,
 } from "@/lib/identity-session";
 import { routes } from "@/lib/routes";
+import { safeErrorMessage } from "@/lib/security-redaction";
 
 export const dynamic = "force-dynamic";
+
+type IdentityDashboard = {
+  identity: {
+    normalizedEmail: string;
+  };
+  memberships: {
+    membershipId: string;
+    role: "admin" | "member";
+    displayName?: string;
+    hasAvailability: boolean;
+    meeting: {
+      title: string;
+      slug: string;
+      lifecycleState: "open" | "finalized";
+    };
+  }[];
+};
 
 export default async function IdentityDashboardPage({
   searchParams,
@@ -58,11 +76,14 @@ export default async function IdentityDashboardPage({
     );
   }
 
-  let dashboard: Awaited<ReturnType<typeof loadIdentityDashboard>> | { error: string };
+  let dashboard: IdentityDashboard | { error: string };
   try {
     dashboard = await loadIdentityDashboard(session.emailIdentityId);
   } catch (caughtError) {
-    console.error("Unable to load identity dashboard", caughtError);
+    console.error(
+      "Unable to load identity dashboard",
+      safeErrorMessage(caughtError, "dashboard load failed"),
+    );
     dashboard = {
       error: "Unable to load the recovery dashboard.",
     };
@@ -138,7 +159,9 @@ export default async function IdentityDashboardPage({
   );
 }
 
-async function loadIdentityDashboard(emailIdentityId: string) {
+async function loadIdentityDashboard(
+  emailIdentityId: string,
+): Promise<IdentityDashboard> {
   const convex = new ConvexHttpClient(getConvexUrl());
   return await convex.query(api.meetings.listIdentityDashboard, {
     internalSecret: getInternalIdentitySecret(),

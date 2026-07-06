@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { RateLimitError, rateLimitErrorResponse } from "@/lib/rate-limit";
+import { redactSecrets } from "@/lib/security-redaction";
 
 export type ApiErrorCode =
   | "bad_json"
@@ -10,6 +12,7 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "conflict"
+  | "rate_limited"
   | "internal_error"
   | "service_unavailable";
 
@@ -32,13 +35,16 @@ export function apiErrorResponse(status: number, code: ApiErrorCode, message: st
 }
 
 export function handleApiError(caughtError: unknown) {
+  if (caughtError instanceof RateLimitError) {
+    return rateLimitErrorResponse(caughtError);
+  }
   if (caughtError instanceof ApiRouteError) {
     return apiErrorResponse(caughtError.status, caughtError.code, caughtError.message);
   }
   const message = getErrorMessage(caughtError);
   const response = apiErrorResponseForMessage(message);
   if (response.status >= 500) {
-    console.error("Agent API request failed", caughtError);
+    console.error("Agent API request failed", redactSecrets(message));
   }
   return response;
 }
@@ -46,6 +52,13 @@ export function handleApiError(caughtError: unknown) {
 export function apiErrorResponseForMessage(message: string) {
   if (/api token is invalid or revoked/iu.test(message)) {
     return apiErrorResponse(401, "invalid_token", "Invalid or revoked API token.");
+  }
+  if (/rate limit exceeded|too many requests/iu.test(message)) {
+    return apiErrorResponse(
+      429,
+      "rate_limited",
+      "Too many requests. Please wait before trying again.",
+    );
   }
   if (/missing required scope/iu.test(message)) {
     return apiErrorResponse(
@@ -82,7 +95,7 @@ export function apiErrorResponseForMessage(message: string) {
     );
   }
   if (/required|invalid|must|outside/iu.test(message)) {
-    return apiErrorResponse(400, "invalid_request", message);
+    return apiErrorResponse(400, "invalid_request", redactSecrets(message));
   }
   return apiErrorResponse(
     500,

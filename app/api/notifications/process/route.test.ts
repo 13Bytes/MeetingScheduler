@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
+import { resetInMemoryRateLimitsForTest } from "@/lib/rate-limit";
 
 const { queryMock, mutationMock, sendMock } = vi.hoisted(() => ({
   queryMock: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/lib/email/adapter", () => ({
 
 describe("notification outbox processor route", () => {
   beforeEach(() => {
+    resetInMemoryRateLimitsForTest();
     vi.unstubAllEnvs();
     queryMock.mockReset();
     mutationMock.mockReset();

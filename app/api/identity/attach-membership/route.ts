@@ -8,6 +8,13 @@ import {
   identitySessionCookieName,
   verifyEmailIdentitySession,
 } from "@/lib/identity-session";
+import {
+  enforceRequestRateLimit,
+  hashRateLimitKey,
+  RateLimitError,
+  rateLimitErrorResponse,
+} from "@/lib/rate-limit";
+import { safeErrorMessage } from "@/lib/security-redaction";
 
 export async function POST(request: NextRequest) {
   const session = verifyEmailIdentitySession(
@@ -26,6 +33,13 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    await enforceRequestRateLimit({
+      request,
+      scope: "identity.attach_membership",
+      key: `${session.emailIdentityId}:${await hashRateLimitKey(body.membershipToken)}`,
+      limit: 20,
+      windowMs: 15 * 60 * 1000,
+    });
 
     const convex = new ConvexHttpClient(getConvexUrl());
     const result = await convex.mutation(
@@ -38,12 +52,12 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (caughtError) {
+    if (caughtError instanceof RateLimitError) {
+      return rateLimitErrorResponse(caughtError);
+    }
     return NextResponse.json(
       {
-        error:
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Unable to attach this email identity.",
+        error: safeErrorMessage(caughtError, "Unable to attach this email identity."),
       },
       { status: 400 },
     );
