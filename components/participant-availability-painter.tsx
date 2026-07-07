@@ -437,6 +437,9 @@ export function ParticipantAvailabilityPainter({
     initialResponses,
     createInitialAvailabilityPaintState,
   );
+  const [hasSubmittedAvailability, setHasSubmittedAvailability] = useState(
+    () => initialResponses.size > 0,
+  );
   const summary = useMemo(
     () => summarizeAvailability(grid, paintState.responsesByCellKey),
     [grid, paintState.responsesByCellKey],
@@ -463,6 +466,7 @@ export function ParticipantAvailabilityPainter({
     pendingSavedResponsesRef.current = null;
     dispatch({ type: "replace", responsesByCellKey: initialResponses });
     savedResponsesRef.current = initialResponses;
+    setHasSubmittedAvailability(initialResponses.size > 0);
   }, [hasLocalEdits, initialResponses]);
 
   const personalMembershipUrl = useMemo(() => {
@@ -548,6 +552,7 @@ export function ParticipantAvailabilityPainter({
         const savedResponses = new Map(paintState.responsesByCellKey);
         savedResponsesRef.current = savedResponses;
         pendingSavedResponsesRef.current = savedResponses;
+        setHasSubmittedAvailability(savedResponses.size > 0);
         setHasLocalEdits(false);
         setNotice("Availability saved.");
       } else if (wasNewJoin) {
@@ -578,21 +583,44 @@ export function ParticipantAvailabilityPainter({
     dispatch({ type: "apply", cellKeys: grid.participantCellKeys, mode: response });
   }
 
+  const resultsPanel = data.results ? (
+    <MeetingResultsPanel
+      results={data.results}
+      canAdminister={data.capabilities.canAdminister}
+      lifecycleState={meeting.lifecycleState}
+      selectedSlot={meeting.finalizedSlot}
+      canFinalize={canFinalizeMeeting}
+      canReopen={canReopenMeeting}
+      onFinalize={
+        canFinalizeMeeting && onFinalizeMeeting && membershipToken
+          ? (finalizedSlot) => onFinalizeMeeting(membershipToken, finalizedSlot)
+          : undefined
+      }
+      onReopen={
+        canReopenMeeting && onReopenMeeting && membershipToken
+          ? () => onReopenMeeting(membershipToken)
+          : undefined
+      }
+    />
+  ) : null;
+
   return (
     <div className="space-y-6">
       <section className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="accent">Participant response</Badge>
-          {meeting.lifecycleState === "finalized" ? (
-            <Badge>Finalized</Badge>
-          ) : (
-            <Badge>Open</Badge>
-          )}
-        </div>
         <div className="grid gap-2">
-          <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
-            {meeting.title}
-          </h1>
+          <div className="flex flex-row gap-2 items-center">
+            <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
+              {meeting.title}
+            </h1>
+            <div>
+              {meeting.lifecycleState === "finalized" ? (
+                <Badge >Participant response Finalized</Badge>
+              ) : (
+                <Badge variant="accent">Participant response Open</Badge>
+              )}
+
+            </div>
+          </div>
           {meeting.description ? (
             <p className="max-w-4xl text-sm leading-6 text-slate-600">
               {meeting.description}
@@ -616,26 +644,7 @@ export function ParticipantAvailabilityPainter({
         {`${summary.yes} yes, ${summary.reluctant} reluctant, ${summary.no} no responses selected.`}
       </p>
 
-      {data.results ? (
-        <MeetingResultsPanel
-          results={data.results}
-          canAdminister={data.capabilities.canAdminister}
-          lifecycleState={meeting.lifecycleState}
-          selectedSlot={meeting.finalizedSlot}
-          canFinalize={canFinalizeMeeting}
-          canReopen={canReopenMeeting}
-          onFinalize={
-            canFinalizeMeeting && onFinalizeMeeting && membershipToken
-              ? (finalizedSlot) => onFinalizeMeeting(membershipToken, finalizedSlot)
-              : undefined
-          }
-          onReopen={
-            canReopenMeeting && onReopenMeeting && membershipToken
-              ? () => onReopenMeeting(membershipToken)
-              : undefined
-          }
-        />
-      ) : null}
+      {hasSubmittedAvailability ? resultsPanel : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,330px)]">
         <Card className="overflow-hidden">
@@ -774,6 +783,8 @@ export function ParticipantAvailabilityPainter({
           />
         </aside>
       </div>
+
+      {hasSubmittedAvailability ? null : resultsPanel}
     </div>
   );
 }
@@ -1241,11 +1252,11 @@ function AvailabilityBrushControls({
     label: string;
     icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   }[] = [
-    { mode: "yes", label: "Yes", icon: Paintbrush },
-    { mode: "reluctant", label: "Reluctant", icon: Smile },
-    { mode: "no", label: "No", icon: ThumbsDown },
-    { mode: "clear", label: "Clear", icon: Eraser },
-  ];
+      { mode: "yes", label: "Yes", icon: Paintbrush },
+      { mode: "reluctant", label: "Reluctant", icon: Smile },
+      { mode: "no", label: "No", icon: ThumbsDown },
+      { mode: "clear", label: "Clear", icon: Eraser },
+    ];
 
   return (
     <div className="flex w-full flex-wrap rounded-md border border-border bg-surface p-1 sm:w-auto">

@@ -36,6 +36,11 @@ export type CandidateParticipantDetail = {
   reluctantCount: number;
 };
 
+export type ResultVotedParticipant = {
+  membershipId: string;
+  displayName?: string;
+};
+
 export type ScoredCandidateSlot = CandidateSlot & {
   availableParticipantCount: number;
   unavailableParticipantCount: number;
@@ -53,11 +58,13 @@ export type MeetingResults = {
   granularityMinutes: number;
   durationMinutes: number;
   totalParticipantCount: number;
+  votedParticipantCount: number;
   availabilityCount: number;
   candidateCount: number;
   detailsVisible: boolean;
   candidates: ScoredCandidateSlot[];
   shortlist: ScoredCandidateSlot[];
+  votedParticipants?: ResultVotedParticipant[];
 };
 
 export type MeetingResultsInput = {
@@ -147,6 +154,14 @@ export function buildMeetingResults({
   const availabilityCount = availabilityRecords.filter((record) =>
     activeMembershipIds.has(record.membershipId),
   ).length;
+  const votedMembershipIds = new Set(
+    availabilityRecords
+      .filter((record) => activeMembershipIds.has(record.membershipId))
+      .map((record) => record.membershipId),
+  );
+  const votedParticipants = activeParticipants.filter((participant) =>
+    votedMembershipIds.has(participant.membershipId),
+  );
   const candidates = generateCandidateSlots({
     allowedTimeRanges,
     granularityMinutes,
@@ -171,11 +186,22 @@ export function buildMeetingResults({
     granularityMinutes,
     durationMinutes,
     totalParticipantCount: activeParticipants.length,
+    votedParticipantCount: votedParticipants.length,
     availabilityCount,
     candidateCount: scoredCandidates.length,
     detailsVisible: includeDetails,
     candidates: scoredCandidates,
-    shortlist: scoredCandidates.slice(0, maxShortlist),
+    shortlist: scoredCandidates
+      .filter((candidate) => candidate.availableParticipantCount > 0)
+      .slice(0, maxShortlist),
+    ...(includeDetails
+      ? {
+          votedParticipants: votedParticipants.map((participant) => ({
+            membershipId: participant.membershipId,
+            displayName: participant.displayName,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -295,9 +321,11 @@ export function redactMeetingResults(results: MeetingResults): MeetingResults {
     delete summary.participantDetails;
     return summary;
   };
+  const summaryResults = { ...results };
+  delete summaryResults.votedParticipants;
 
   return {
-    ...results,
+    ...summaryResults,
     detailsVisible: false,
     candidates: results.candidates.map(redactCandidate),
     shortlist: results.shortlist.map(redactCandidate),

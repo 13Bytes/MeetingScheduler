@@ -7,7 +7,6 @@ const navItems = [
   { href: routes.home, label: "Overview" },
   { href: routes.newMeeting, label: "New meeting" },
   { href: routes.identity, label: "Email recovery" },
-  { href: routes.meetingPoll("demo-poll"), label: "Poll" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

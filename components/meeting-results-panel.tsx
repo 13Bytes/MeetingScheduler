@@ -8,6 +8,7 @@ import {
   RotateCcw,
   SmilePlus,
   UsersRound,
+  CircleUserRound
 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -45,7 +46,14 @@ export function MeetingResultsPanel({
   const hasParticipants = results.totalParticipantCount > 0;
   const hasVotes = results.availabilityCount > 0;
   const hasCandidates = results.candidateCount > 0;
-  const shouldShowShortlist = hasVotes && !selectedSlot;
+  const recommendedShortlist = results.shortlist.filter(
+    (candidate) => candidate.availableParticipantCount > 0,
+  );
+  const heatmapCandidates = results.candidates.filter(
+    (candidate) => candidate.availableParticipantCount > 0,
+  );
+  const shouldShowShortlist =
+    hasVotes && !selectedSlot && (recommendedShortlist.length > 0 || !hasCandidates);
   const shouldShowWaitingState = hasParticipants && !hasVotes && !selectedSlot;
   const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{
@@ -53,7 +61,7 @@ export function MeetingResultsPanel({
     message: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const defaultCandidate = results.shortlist[0] ?? results.candidates[0];
+  const defaultCandidate = recommendedShortlist[0] ?? results.candidates[0];
   const selectedCandidate =
     (selectedCandidateKey
       ? results.candidates.find(
@@ -139,6 +147,12 @@ export function MeetingResultsPanel({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {canAdminister ? <Badge variant="accent">Admin view</Badge> : null}
+                  {!results.detailsVisible ? (
+                    <Badge>
+                      <EyeOff className="size-3.5" aria-hidden="true" />
+                      Summary only
+                    </Badge>
+                  ) : null}
                 </div>
               </div>
             </CardHeader>
@@ -146,7 +160,7 @@ export function MeetingResultsPanel({
               {hasParticipants && !hasCandidates ? (
                 <EmptyResultsMessage message="No candidate slots fit inside the current admin-allowed ranges." />
               ) : null}
-              {results.shortlist.map((candidate) => (
+              {recommendedShortlist.map((candidate) => (
                 <CandidateRow
                   key={`${candidate.startUtc}_${candidate.endUtc}`}
                   candidate={candidate}
@@ -249,22 +263,29 @@ export function MeetingResultsPanel({
               </Card>
             ) : null}
 
+            <VotedParticipantsCard results={results} />
+
             <Card>
               <CardHeader>
                 <CardTitle>Score Heatmap</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {results.candidates.slice(0, 12).map((candidate) => (
+                {heatmapCandidates.slice(0, 12).map((candidate) => (
                   <HeatmapBar
                     key={`${candidate.startUtc}_${candidate.endUtc}`}
                     candidate={candidate}
                     timeZone={results.timeZone}
                   />
                 ))}
-                {results.candidates.length > 12 ? (
+                {heatmapCandidates.length > 12 ? (
                   <p className="text-xs leading-5 text-slate-500">
-                    Showing the strongest 12 of {results.candidates.length} candidate
-                    slots.
+                    Showing the strongest 12 of {heatmapCandidates.length} candidate
+                    slots with at least one attendee.
+                  </p>
+                ) : null}
+                {hasParticipants && hasCandidates && heatmapCandidates.length === 0 ? (
+                  <p className="text-sm leading-6 text-slate-600">
+                    No candidate slots have any attendees yet.
                   </p>
                 ) : null}
                 {hasParticipants && hasCandidates ? null : (
@@ -293,6 +314,45 @@ export function MeetingResultsPanel({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function VotedParticipantsCard({ results }: { results: MeetingResults }) {
+  const votedParticipants = results.votedParticipants ?? [];
+  const votedParticipantCount = results.votedParticipantCount ?? 0;
+  const canShowNames = results.detailsVisible && votedParticipants.length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Votes Submitted</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {canShowNames ? (
+          <div className="flex flex-wrap gap-2">
+            {votedParticipants.map((participant) => (
+              <Badge key={participant.membershipId} className="gap-2">
+                <CircleUserRound data-icon="inline-start" className="size-4" />
+                {participant.displayName ?? "Unnamed participant"}
+              </Badge>
+            ))}
+          </div>
+        ) : results.detailsVisible ? (
+          <p className="text-sm leading-6 text-slate-600">
+            No participants have voted yet.
+          </p>
+        ) : (
+          <p className="text-xs leading-5 text-slate-500">
+            Names are hidden for summary-only results.
+          </p>
+        )}
+        <p className="text-sm leading-6 text-slate-600">
+          {votedParticipantCount} of {results.totalParticipantCount}{" "}
+          {results.totalParticipantCount === 1 ? "participant has" : "participants have"}{" "}
+          voted.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

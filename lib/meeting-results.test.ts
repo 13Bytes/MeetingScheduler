@@ -251,12 +251,44 @@ describe("candidate scoring and ranking", () => {
     expect(results).toMatchObject({
       generatedAt: 123,
       totalParticipantCount: 2,
+      votedParticipantCount: 1,
       availabilityCount: 2,
       candidateCount: 3,
       detailsVisible: false,
     });
-    expect(results.shortlist).toHaveLength(2);
+    expect(results.shortlist).toHaveLength(1);
     expect(results.shortlist[0].participantDetails).toBeUndefined();
+    expect(results.shortlist[0].availableParticipantCount).toBeGreaterThan(0);
+    expect(results.candidates).toHaveLength(3);
+    expect(results.votedParticipants).toBeUndefined();
+  });
+
+  it("lists voted participants when detailed results are visible", () => {
+    const results = buildMeetingResults({
+      allowedTimeRanges: ranges,
+      participants,
+      availabilityRecords: [
+        {
+          membershipId: "alice",
+          cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+          response: "yes",
+        },
+        {
+          membershipId: "revoked",
+          cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+          response: "yes",
+        },
+      ],
+      granularityMinutes: 30,
+      durationMinutes: 60,
+      timeZone: "Europe/Berlin",
+      includeDetails: true,
+    });
+
+    expect(results.votedParticipantCount).toBe(1);
+    expect(results.votedParticipants).toEqual([
+      { membershipId: "alice", displayName: "Alice" },
+    ]);
   });
 });
 
@@ -315,6 +347,7 @@ describe("result privacy", () => {
       granularityMinutes: 30,
       durationMinutes: 60,
       totalParticipantCount: 1,
+      votedParticipantCount: 1,
       availabilityCount: 1,
       candidateCount: 1,
       detailsVisible: true,
@@ -364,6 +397,7 @@ describe("result privacy", () => {
           ],
         },
       ],
+      votedParticipants: [{ membershipId: "alice", displayName: "Alice" }],
     };
 
     const redacted = redactMeetingResults(detailedResults);
@@ -371,5 +405,7 @@ describe("result privacy", () => {
     expect(redacted.detailsVisible).toBe(false);
     expect(redacted.candidates[0].participantDetails).toBeUndefined();
     expect(redacted.shortlist[0].participantDetails).toBeUndefined();
+    expect(redacted.votedParticipantCount).toBe(1);
+    expect(redacted.votedParticipants).toBeUndefined();
   });
 });

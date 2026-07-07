@@ -35,6 +35,7 @@ const results: MeetingResults = {
   granularityMinutes: 30,
   durationMinutes: 60,
   totalParticipantCount: 1,
+  votedParticipantCount: 1,
   availabilityCount: 2,
   candidateCount: 1,
   detailsVisible: false,
@@ -109,6 +110,65 @@ describe("ParticipantAvailabilityPainter", () => {
     );
     expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
     expect(screen.queryByRole("textbox", { name: /private return link/i })).toBeNull();
+  });
+
+  it("shows the availability workflow before results until the viewer has voted", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{ ...baseData, results }}
+        onCreateMembership={vi.fn()}
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    const availabilityHeading = screen.getByRole("heading", {
+      name: /availability calendar/i,
+    });
+    const resultsHeading = screen.getByRole("heading", {
+      name: /recommended shortlist/i,
+    });
+
+    expect(
+      availabilityHeading.compareDocumentPosition(resultsHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps results before the availability workflow after the viewer has voted", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          ownAvailabilityRecords: [
+            {
+              cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+              startUtc: "2026-06-25T07:00:00.000Z",
+              endUtc: "2026-06-25T07:30:00.000Z",
+              timeZone: "Europe/Berlin",
+              response: "yes",
+            },
+          ],
+          results,
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    const resultsHeading = screen.getByRole("heading", {
+      name: /recommended shortlist/i,
+    });
+    const availabilityHeading = screen.getByRole("heading", {
+      name: /availability calendar/i,
+    });
+
+    expect(
+      resultsHeading.compareDocumentPosition(availabilityHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows regular and private links for returning regular users", () => {

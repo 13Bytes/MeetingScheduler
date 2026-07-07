@@ -43,9 +43,6 @@ export default function HomePage() {
             <Button asChild className="w-full sm:w-auto">
               <Link href={routes.newMeeting}>Create a meeting</Link>
             </Button>
-            <Button asChild variant="secondary" className="w-full sm:w-auto">
-              <Link href={routes.meetingPoll("demo-poll")}>View poll placeholder</Link>
-            </Button>
           </div>
         </div>
 
