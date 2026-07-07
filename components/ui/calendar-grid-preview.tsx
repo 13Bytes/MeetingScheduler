@@ -8,8 +8,8 @@ const tentativeCells = new Set(["Tue-12:00", "Wed-10:00", "Fri-11:00"]);
 
 export function CalendarGridPreview() {
   return (
-    <div className="overflow-hidden rounded-md border border-border">
-      <div className="grid grid-cols-[72px_repeat(5,minmax(72px,1fr))] bg-surface-muted text-xs font-medium text-slate-600">
+    <div className="w-full min-w-0 overflow-x-auto rounded-md border border-border">
+      <div className="grid min-w-[420px] grid-cols-[64px_repeat(5,minmax(64px,1fr))] bg-surface-muted text-xs font-medium text-slate-600 sm:min-w-0 sm:grid-cols-[72px_repeat(5,minmax(72px,1fr))]">
         <div className="border-r border-border px-3 py-2">Time</div>
         {days.map((day) => (
           <div key={day} className="border-r border-border px-3 py-2 last:border-r-0">
@@ -17,7 +17,7 @@ export function CalendarGridPreview() {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-[72px_repeat(5,minmax(72px,1fr))]">
+      <div className="grid min-w-[420px] grid-cols-[64px_repeat(5,minmax(64px,1fr))] sm:min-w-0 sm:grid-cols-[72px_repeat(5,minmax(72px,1fr))]">
         {times.map((time) => (
           <Row key={time} time={time} />
         ))}
@@ -41,7 +41,7 @@ function Row({ time }: { time: string }) {
           <div
             key={key}
             className={cn(
-              "min-h-14 border-r border-t border-border last:border-r-0",
+              "min-h-12 border-r border-t border-border last:border-r-0 sm:min-h-14",
               isSelected && "bg-primary",
               isTentative && "bg-teal-100",
               !isSelected && !isTentative && "bg-surface",

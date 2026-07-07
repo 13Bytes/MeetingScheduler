@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 export default function IdentityPage() {
   return (
     <AppShell>
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_420px] lg:items-start">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,420px)] lg:items-start">
         <div className="space-y-4">
           <h1 className="text-3xl font-semibold tracking-normal text-foreground">
             Email recovery
@@ -16,10 +16,10 @@ export default function IdentityPage() {
             responses after you attach a verified email to a membership.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild>
+            <Button asChild className="w-full sm:w-auto">
               <Link href="/identity/dashboard">Open dashboard</Link>
             </Button>
-            <Button asChild variant="secondary">
+            <Button asChild variant="secondary" className="w-full sm:w-auto">
               <Link href="/new">Create without an account</Link>
             </Button>
           </div>

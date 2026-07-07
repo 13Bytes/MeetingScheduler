@@ -122,15 +122,15 @@ export function MeetingResultsPanel({
         />
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         {shouldShowShortlist ? (
           <Card>
             <CardHeader className="border-b border-border">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-start gap-2">
                     <CalendarCheck2 className="size-5 text-primary" aria-hidden="true" />
-                    Recommended Shortlist
+                    <span>Recommended Shortlist</span>
                   </CardTitle>
                   <p className="text-sm leading-6 text-slate-600">
                     Ranked by attendees first, then fewer reluctant cells, then earliest
@@ -327,7 +327,7 @@ function CandidateRow({
       )}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-base font-semibold text-foreground">
               #{candidate.rank} {formatCandidateWindow(candidate, timeZone)}
@@ -357,7 +357,7 @@ function CandidateRow({
         <Button
           type="button"
           variant={isSelected ? "secondary" : "ghost"}
-          className="mt-3"
+          className="mt-3 w-full sm:w-auto"
           onClick={onSelect}
         >
           <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -403,12 +403,12 @@ function FinalSlotBanner({
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="accent">Final time</Badge>
             <span className="text-xs font-medium text-slate-500">{timeZone}</span>
           </div>
-          <p className="text-lg font-semibold text-foreground">
+          <p className="break-words text-lg font-semibold text-foreground">
             {formatSlotWindow(slot, timeZone)}
           </p>
         </div>
@@ -416,6 +416,7 @@ function FinalSlotBanner({
           <Button
             type="button"
             variant="secondary"
+            className="w-full sm:w-auto"
             disabled={isSubmitting}
             onClick={onReopen}
           >
@@ -472,7 +473,7 @@ function HeatmapBar({
 
   return (
     <div className="grid gap-1">
-      <div className="flex items-center justify-between gap-3 text-xs">
+      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
         <span className="truncate font-medium text-foreground">
           {formatCandidateWindow(candidate, timeZone)}
         </span>

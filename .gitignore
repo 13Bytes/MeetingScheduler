@@ -2,6 +2,7 @@
 .env*.local
 .convex/
 .next/
+.responsive-screenshots/
 node_modules/
 coverage/
 dist/
