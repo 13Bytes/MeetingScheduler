@@ -22,6 +22,11 @@ export type ApiOwnedMembership = PermissionMembership & {
   emailIdentityId?: string;
 };
 
+type ApiEditableMembership = NonNullable<PermissionMembership> & {
+  meetingId: string;
+  emailIdentityId?: string;
+};
+
 export function normalizeApiTokenScopes(scopes: ApiTokenScope[]) {
   const uniqueScopes = Array.from(new Set(scopes));
   if (uniqueScopes.length === 0) {
@@ -61,19 +66,15 @@ export function selectApiMembershipForMeeting<
   );
 }
 
-export function assertApiCanEditMembershipAvailability(
-  membership:
-    | (PermissionMembership & {
-        meetingId: string;
-        emailIdentityId?: string;
-      })
-    | null
-    | undefined,
+export function assertApiCanEditMembershipAvailability<
+  Membership extends ApiEditableMembership,
+>(
+  membership: Membership | null | undefined,
   args: {
     emailIdentityId: string;
     meetingId: string;
   },
-) {
+): asserts membership is Membership {
   if (
     !membership ||
     membership.meetingId !== args.meetingId ||

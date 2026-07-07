@@ -1,4 +1,5 @@
 import { apiTokenScopes, type ApiTokenScope } from "@/convex/domain/agentApi";
+import type { AvailabilityResponse, PrivacyMode } from "@/convex/domain/model";
 import { ApiRouteError } from "./responses";
 
 export { apiTokenScopes };
@@ -80,24 +81,14 @@ export function parseAvailabilityBody(body: Record<string, unknown>) {
           `records[${index}] must be an object.`,
         );
       }
-      const response = record.response;
-      if (
-        response !== undefined &&
-        response !== "yes" &&
-        response !== "reluctant" &&
-        response !== "no"
-      ) {
-        throw new ApiRouteError(
-          400,
-          "invalid_request",
-          `records[${index}].response must be yes, reluctant, no, or omitted.`,
-        );
-      }
       return {
         startUtc: requiredString(record.startUtc, `records[${index}].startUtc`),
         endUtc: requiredString(record.endUtc, `records[${index}].endUtc`),
         timeZone: optionalString(record.timeZone, `records[${index}].timeZone`),
-        response,
+        response: optionalAvailabilityResponse(
+          record.response,
+          `records[${index}].response`,
+        ),
         note: optionalString(record.note, `records[${index}].note`),
       };
     }),
@@ -208,7 +199,7 @@ function optionalNumber(value: unknown, name: string) {
   return value;
 }
 
-function optionalPrivacyMode(value: unknown) {
+function optionalPrivacyMode(value: unknown): PrivacyMode | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -217,6 +208,23 @@ function optionalPrivacyMode(value: unknown) {
       400,
       "invalid_request",
       "privacyMode must be detailed or summaryOnly.",
+    );
+  }
+  return value;
+}
+
+function optionalAvailabilityResponse(
+  value: unknown,
+  name: string,
+): AvailabilityResponse | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (value !== "yes" && value !== "reluctant" && value !== "no") {
+    throw new ApiRouteError(
+      400,
+      "invalid_request",
+      `${name} must be yes, reluctant, no, or omitted.`,
     );
   }
   return value;
