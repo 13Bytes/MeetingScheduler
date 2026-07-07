@@ -1,7 +1,6 @@
 .env
 .env*.local
 .convex/
-convex/_generated/
 .next/
 node_modules/
 coverage/
