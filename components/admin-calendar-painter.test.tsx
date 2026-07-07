@@ -4,7 +4,7 @@ import { AdminCalendarPainter } from "@/components/admin-calendar-painter";
 
 const editableData = {
   meeting: {
-    title: "Stage 3 planning",
+    title: "Team planning",
     lifecycleState: "open" as const,
     adminMode: "roleBased" as const,
     canonicalTimeZone: "Europe/Berlin",

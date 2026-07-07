@@ -445,6 +445,143 @@ export const createParticipantMembership = mutation({
   },
 });
 
+export const createAdminInviteToken = mutation({
+  args: {
+    membershipToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const membership = await requireMembershipByToken(ctx, args.membershipToken);
+    const meeting = await requireMeeting(ctx, membership.meetingId);
+    assertCanAdminister(meeting, membership);
+    if (meeting.adminMode === "everyoneAdmin") {
+      throw new Error("This meeting does not need a separate admin invite link");
+    }
+
+    await assertConvexRateLimit(ctx, {
+      scope: "admin_invite.create",
+      key: membership._id,
+      limit: 30,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+
+    const adminInviteToken = await createSecretToken("adminInvite");
+    await ctx.db.insert("adminInviteTokens", {
+      meetingId: meeting._id,
+      createdByMembershipId: membership._id,
+      tokenHash: adminInviteToken.tokenHash,
+      tokenFingerprint: adminInviteToken.tokenFingerprint,
+      tokenVersion: 1,
+      tokenCreatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await insertAuditEvent(ctx, {
+      meetingId: meeting._id,
+      actorMembershipId: membership._id,
+      kind: "adminInvite.created",
+      metadata: { tokenFingerprint: adminInviteToken.tokenFingerprint },
+      now,
+    });
+
+    return {
+      adminInviteToken: adminInviteToken.rawToken,
+      tokenFingerprint: adminInviteToken.tokenFingerprint,
+    };
+  },
+});
+
+export const createAdminMembershipFromInvite = mutation({
+  args: {
+    meetingSlug: v.string(),
+    adminInviteToken: v.string(),
+    displayName: v.string(),
+    privacyMode: v.optional(privacyModeValidator),
+    clientRateLimitKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const meeting = await findMeetingBySlug(ctx, args.meetingSlug);
+    if (!meeting) {
+      throw new Error("Meeting not found");
+    }
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.admin_invite_create",
+      key: meeting.slug,
+      limit: 300,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+    if (args.clientRateLimitKey) {
+      await assertConvexRateLimit(ctx, {
+        scope: "membership.admin_invite_create.client",
+        key: `${meeting.slug}:${args.clientRateLimitKey}`,
+        limit: 60,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+        now,
+      });
+    }
+
+    if (meeting.lifecycleState !== "open") {
+      throw new Error("Finalized meetings are read-only until reopened");
+    }
+    if (meeting.adminMode === "everyoneAdmin") {
+      throw new Error("This meeting does not require an admin invite");
+    }
+
+    const adminInvite = await requireAdminInviteToken(ctx, args.adminInviteToken);
+    if (adminInvite.meetingId !== meeting._id) {
+      throw new Error("Admin invite does not belong to this meeting");
+    }
+
+    const creator = await ctx.db.get(adminInvite.createdByMembershipId);
+    if (!creator || creator.meetingId !== meeting._id) {
+      throw new Error("Admin invite creator is unavailable");
+    }
+    assertCanAdminister(meeting, creator);
+
+    const displayName = normalizeParticipantDisplayName(args.displayName);
+    const membershipToken = await createSecretToken("membership");
+    const membershipId = await ctx.db.insert("memberships", {
+      meetingId: meeting._id,
+      displayName,
+      role: "admin",
+      privacyMode: args.privacyMode ?? "detailed",
+      tokenHash: membershipToken.tokenHash,
+      tokenFingerprint: membershipToken.tokenFingerprint,
+      tokenVersion: 1,
+      tokenCreatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch(adminInvite._id, {
+      tokenLastUsedAt: now,
+      updatedAt: now,
+    });
+
+    await insertAuditEvent(ctx, {
+      meetingId: meeting._id,
+      actorMembershipId: creator._id,
+      targetMembershipId: membershipId,
+      kind: "membership.created",
+      metadata: {
+        role: "admin",
+        adminInviteFingerprint: adminInvite.tokenFingerprint,
+      },
+      now,
+    });
+
+    return {
+      meetingId: meeting._id,
+      membershipId,
+      membershipToken: membershipToken.rawToken,
+    };
+  },
+});
+
 export const updateMembershipDisplayName = mutation({
   args: {
     membershipToken: v.string(),
@@ -1592,6 +1729,18 @@ async function requireMembershipByToken(ctx: MutationLikeCtx, membershipToken: s
     });
   }
   return membership;
+}
+
+async function requireAdminInviteToken(ctx: MutationLikeCtx, adminInviteToken: string) {
+  const tokenHash = await hashSecretToken(adminInviteToken);
+  const adminInvite = await ctx.db
+    .query("adminInviteTokens")
+    .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+    .unique();
+  if (!adminInvite || adminInvite.revokedAt !== undefined) {
+    throw new Error("Admin invite link is invalid or revoked");
+  }
+  return adminInvite;
 }
 
 async function requireMeeting(ctx: QueryLikeCtx, meetingId: Id<"meetings">) {

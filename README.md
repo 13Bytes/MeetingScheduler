@@ -103,14 +103,14 @@ The currently supported allowed-time shortcuts are:
 - the next 10 days from 10:00-16:00
 - a modest custom daily range with date, time, and weekend controls
 
-After Convex creates the meeting and creator membership, the page displays two
-copyable links:
+After Convex creates the meeting and creator membership, the creator is
+redirected to their private admin membership link at `/join/[membershipToken]`.
+The meeting page displays shareable invitation links and clearly separates each
+user's private return link.
 
-- the creator's personal admin membership link at `/join/[membershipToken]`
-- the public participant link at `/m/[meetingSlug]`
-
-Admin access uses the same membership-secret-link model as every other
-person-meeting relationship. There is no separate admin token model.
+Admin access remains a membership role. Role-based admin meetings can mint
+separate admin invite links so admins can invite other admins without sharing
+their own private membership link.
 
 ## Passwordless Email Recovery
 

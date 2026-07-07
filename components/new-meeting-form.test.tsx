@@ -7,13 +7,19 @@ describe("NewMeetingForm", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates a meeting and shows personal admin plus public links", async () => {
+  it("creates a meeting and redirects to the personal admin link", async () => {
     const createMeeting = vi.fn().mockResolvedValue({
       slug: "team-planning",
       adminMembershipToken: "admin-secret",
     });
+    const onCreatedRedirect = vi.fn();
 
-    render(<NewMeetingForm createMeeting={createMeeting} />);
+    render(
+      <NewMeetingForm
+        createMeeting={createMeeting}
+        onCreatedRedirect={onCreatedRedirect}
+      />,
+    );
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Team planning" },
@@ -35,12 +41,11 @@ describe("NewMeetingForm", () => {
       }),
     );
 
-    expect(
-      await screen.findByDisplayValue("http://localhost:3000/join/admin-secret"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByDisplayValue("http://localhost:3000/m/team-planning"),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(onCreatedRedirect).toHaveBeenCalledWith(
+        "http://localhost:3000/join/admin-secret",
+      ),
+    );
   });
 
   it("submits a trimmed optional recovery email", async () => {

@@ -2,7 +2,6 @@ import { CalendarDays, Link2, Mail, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { RoutePlaceholder } from "@/components/route-placeholder";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CalendarGridPreview } from "@/components/ui/calendar-grid-preview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +30,6 @@ export default function HomePage() {
     <AppShell>
       <section className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
         <div className="space-y-6">
-          <Badge variant="accent">Stage 2 creation flow</Badge>
           <div className="space-y-4">
             <h1 className="max-w-3xl text-3xl font-semibold tracking-normal text-foreground sm:text-5xl">
               Meeting Scheduler

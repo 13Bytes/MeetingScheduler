@@ -139,14 +139,6 @@ export function MeetingResultsPanel({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {canAdminister ? <Badge variant="accent">Admin view</Badge> : null}
-                  {!results.detailsVisible ? (
-                    <Badge>
-                      <EyeOff className="size-3.5" aria-hidden="true" />
-                      Summary only
-                    </Badge>
-                  ) : (
-                    <Badge>Detailed</Badge>
-                  )}
                 </div>
               </div>
             </CardHeader>

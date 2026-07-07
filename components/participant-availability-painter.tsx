@@ -41,6 +41,11 @@ import {
 import { buildAbsoluteAppUrl, routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { getAnonymousClientRateLimitKey } from "@/lib/client-rate-limit-key";
+import {
+  forgetRememberedMembershipToken,
+  readRememberedMembershipToken,
+  rememberMembershipToken,
+} from "@/lib/membership-session";
 
 type MeetingSummary = {
   _id?: string;
@@ -98,21 +103,71 @@ type FinalSlot = {
   endUtc: string;
   timeZone?: string;
 };
+type CreateAdminInviteToken = (
+  membershipToken: string,
+) => Promise<{ adminInviteToken: string }>;
 
 export function ConnectedPublicParticipantMeeting({
   meetingSlug,
+  adminInviteToken,
 }: {
   meetingSlug: string;
+  adminInviteToken?: string;
 }) {
+  const [rememberedMembershipToken, setRememberedMembershipToken] = useState(() =>
+    typeof window === "undefined" ? null : readRememberedMembershipToken(meetingSlug),
+  );
+  const activeRememberedMembershipToken = adminInviteToken
+    ? null
+    : rememberedMembershipToken;
   const meetingData = useQuery(api.meetings.readPublicMeetingBySlug, {
     slug: meetingSlug,
   });
+  const rememberedMeetingData = useQuery(
+    api.meetings.readParticipantMeetingByMembershipToken,
+    activeRememberedMembershipToken
+      ? { membershipToken: activeRememberedMembershipToken }
+      : "skip",
+  );
   const createParticipantMembership = useMutation(
     api.meetings.createParticipantMembership,
   );
+  const createAdminMembershipFromInvite = useMutation(
+    api.meetings.createAdminMembershipFromInvite,
+  );
+  const createAdminInviteToken = useMutation(api.meetings.createAdminInviteToken);
   const saveAvailabilityRecords = useMutation(api.meetings.saveAvailabilityRecords);
+  const updateMembershipDisplayName = useMutation(
+    api.meetings.updateMembershipDisplayName,
+  );
+  const finalizeMeeting = useMutation(api.meetings.finalizeMeeting);
+  const reopenMeeting = useMutation(api.meetings.reopenMeeting);
+  const validRememberedMeetingData =
+    rememberedMeetingData && rememberedMeetingData.meeting.slug === meetingSlug
+      ? rememberedMeetingData
+      : null;
 
-  if (meetingData === undefined) {
+  useEffect(() => {
+    if (!activeRememberedMembershipToken) {
+      return;
+    }
+    if (
+      rememberedMeetingData === undefined ||
+      (rememberedMeetingData && rememberedMeetingData.meeting.slug === meetingSlug)
+    ) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      forgetRememberedMembershipToken(meetingSlug);
+      setRememberedMembershipToken(null);
+    }, 0);
+  }, [activeRememberedMembershipToken, meetingSlug, rememberedMeetingData]);
+
+  if (
+    meetingData === undefined ||
+    (activeRememberedMembershipToken && rememberedMeetingData === undefined)
+  ) {
     return <LoadingPanel label="Loading meeting" />;
   }
 
@@ -121,6 +176,35 @@ export function ConnectedPublicParticipantMeeting({
       <PermissionPanel
         title="Meeting unavailable"
         description="This public meeting link does not point to an active poll."
+      />
+    );
+  }
+
+  if (activeRememberedMembershipToken && validRememberedMeetingData) {
+    return (
+      <ParticipantAvailabilityPainter
+        data={validRememberedMeetingData}
+        existingMembershipToken={activeRememberedMembershipToken}
+        onSaveAvailability={(token, records) =>
+          saveAvailabilityRecords({ membershipToken: token, records })
+        }
+        onUpdateDisplayName={(token, nextDisplayName) =>
+          updateMembershipDisplayName({
+            membershipToken: token,
+            displayName: nextDisplayName,
+          })
+        }
+        onFinalizeMeeting={(token, finalizedSlot) =>
+          finalizeMeeting({ membershipToken: token, finalizedSlot })
+        }
+        onReopenMeeting={(token) => reopenMeeting({ membershipToken: token })}
+        onCreateAdminInviteToken={(membershipToken) =>
+          createAdminInviteToken({ membershipToken })
+        }
+        onMembershipTokenAvailable={(membershipToken, slug) => {
+          rememberMembershipToken(slug, membershipToken);
+          setRememberedMembershipToken(membershipToken);
+        }}
       />
     );
   }
@@ -136,17 +220,34 @@ export function ConnectedPublicParticipantMeeting({
         ownAvailabilityRecords: [],
         results: meetingData.results,
       }}
-      onCreateMembership={async (displayName) =>
-        createParticipantMembership({
+      adminInviteToken={adminInviteToken}
+      onCreateMembership={async (displayName) => {
+        if (adminInviteToken) {
+          return createAdminMembershipFromInvite({
+            meetingSlug: meetingData.meeting.slug,
+            adminInviteToken,
+            displayName,
+            privacyMode: "detailed",
+            clientRateLimitKey: getAnonymousClientRateLimitKey(),
+          });
+        }
+        return createParticipantMembership({
           meetingSlug: meetingData.meeting.slug,
           displayName,
           privacyMode: "detailed",
           clientRateLimitKey: getAnonymousClientRateLimitKey(),
-        })
-      }
+        });
+      }}
       onSaveAvailability={(membershipToken, records) =>
         saveAvailabilityRecords({ membershipToken, records })
       }
+      onCreateAdminInviteToken={(membershipToken) =>
+        createAdminInviteToken({ membershipToken })
+      }
+      onMembershipTokenAvailable={(membershipToken, slug) => {
+        rememberMembershipToken(slug, membershipToken);
+        setRememberedMembershipToken(membershipToken);
+      }}
     />
   );
 }
@@ -166,6 +267,7 @@ export function ConnectedMembershipAvailability({
   const updateMembershipDisplayName = useMutation(
     api.meetings.updateMembershipDisplayName,
   );
+  const createAdminInviteToken = useMutation(api.meetings.createAdminInviteToken);
   const [showAdminSetup, setShowAdminSetup] = useState(false);
 
   if (meetingData === undefined) {
@@ -201,6 +303,10 @@ export function ConnectedMembershipAvailability({
           finalizeMeeting({ membershipToken: token, finalizedSlot })
         }
         onReopenMeeting={(token) => reopenMeeting({ membershipToken: token })}
+        onCreateAdminInviteToken={(token) =>
+          createAdminInviteToken({ membershipToken: token })
+        }
+        onMembershipTokenAvailable={(token, slug) => rememberMembershipToken(slug, token)}
       />
 
       {canAdminister ? (
@@ -262,6 +368,9 @@ export function ParticipantAvailabilityPainter({
   onUpdateDisplayName,
   onFinalizeMeeting,
   onReopenMeeting,
+  onCreateAdminInviteToken,
+  onMembershipTokenAvailable,
+  adminInviteToken,
   baseDate,
 }: {
   data: ParticipantData;
@@ -274,6 +383,9 @@ export function ParticipantAvailabilityPainter({
     finalizedSlot: FinalSlot,
   ) => Promise<unknown>;
   onReopenMeeting?: (membershipToken: string) => Promise<unknown>;
+  onCreateAdminInviteToken?: CreateAdminInviteToken;
+  onMembershipTokenAvailable?: (membershipToken: string, meetingSlug: string) => void;
+  adminInviteToken?: string;
   baseDate?: Date;
 }) {
   const { meeting } = data;
@@ -282,9 +394,10 @@ export function ParticipantAvailabilityPainter({
   const [createdMembershipToken, setCreatedMembershipToken] = useState<string | null>(
     null,
   );
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [createdMembershipCanAdminister, setCreatedMembershipCanAdminister] =
+    useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
 
@@ -361,11 +474,28 @@ export function ParticipantAvailabilityPainter({
       window.location.origin,
     );
   }, [membershipToken]);
+  const publicParticipantUrl = useMemo(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return buildAbsoluteAppUrl(routes.meetingPoll(meeting.slug), window.location.origin);
+  }, [meeting.slug]);
+  const canShareAdminInvite =
+    meeting.adminMode === "roleBased" &&
+    Boolean(membershipToken) &&
+    (data.capabilities.canAdminister || createdMembershipCanAdminister);
+
+  useEffect(() => {
+    if (!membershipToken || !onMembershipTokenAvailable) {
+      return;
+    }
+
+    onMembershipTokenAvailable(membershipToken, meeting.slug);
+  }, [meeting.slug, membershipToken, onMembershipTokenAvailable]);
 
   async function handleSave() {
     setError(null);
     setNotice(null);
-    setCopied(false);
 
     if (!canEdit) {
       setError("This meeting is read-only until an admin reopens it.");
@@ -407,6 +537,9 @@ export function ParticipantAvailabilityPainter({
         const result = await onCreateMembership!(normalizedDisplayName);
         activeToken = result.membershipToken;
         setCreatedMembershipToken(activeToken);
+        setCreatedMembershipCanAdminister(
+          Boolean(adminInviteToken) || meeting.adminMode === "everyoneAdmin",
+        );
       } else if (existingMembershipNeedsName) {
         await onUpdateDisplayName!(activeToken, normalizedDisplayName);
       }
@@ -432,19 +565,6 @@ export function ParticipantAvailabilityPainter({
       );
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function copyPersonalLink() {
-    if (!personalMembershipUrl) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(personalMembershipUrl);
-      setCopied(true);
-      setError(null);
-    } catch {
-      setError("Clipboard access is unavailable. Select the link text to copy it.");
     }
   }
 
@@ -634,46 +754,197 @@ export function ParticipantAvailabilityPainter({
             </CardContent>
           </Card>
 
-          {personalMembershipUrl ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Personal Link</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm leading-6 text-slate-600">
-                  Use this private link to return and edit your own response.
-                </p>
-                <div className="flex min-w-0 gap-2">
-                  <input
-                    className={cn(inputClassName, "min-w-0")}
-                    readOnly
-                    value={personalMembershipUrl}
-                    aria-label="Personal membership link"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="icon"
-                    className="shrink-0"
-                    aria-label="Copy personal membership link"
-                    onClick={copyPersonalLink}
-                  >
-                    {copied ? (
-                      <Check className="size-4 text-accent" aria-hidden="true" />
-                    ) : (
-                      <Clipboard className="size-4" aria-hidden="true" />
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
+          <MeetingLinksPanel
+            publicParticipantUrl={publicParticipantUrl}
+            personalMembershipUrl={personalMembershipUrl}
+            canShareAdminInvite={canShareAdminInvite}
+            membershipToken={membershipToken ?? null}
+            meetingSlug={meeting.slug}
+            onCreateAdminInviteToken={onCreateAdminInviteToken}
+            onCopyError={() =>
+              setError(
+                "Clipboard access is unavailable. Select the link text to copy it.",
+              )
+            }
+          />
 
           <MembershipIdentityPanel
             membershipToken={membershipToken ?? undefined}
             isEmailRecoveryAttached={data.membership?.hasEmailIdentity}
           />
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function MeetingLinksPanel({
+  publicParticipantUrl,
+  personalMembershipUrl,
+  canShareAdminInvite,
+  membershipToken,
+  meetingSlug,
+  onCreateAdminInviteToken,
+  onCopyError,
+}: {
+  publicParticipantUrl: string | null;
+  personalMembershipUrl: string | null;
+  canShareAdminInvite: boolean;
+  membershipToken: string | null;
+  meetingSlug: string;
+  onCreateAdminInviteToken?: CreateAdminInviteToken;
+  onCopyError: () => void;
+}) {
+  const [adminInvite, setAdminInvite] = useState<{
+    membershipToken: string;
+    url: string;
+  } | null>(null);
+  const [adminInviteError, setAdminInviteError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState<
+    "public" | "adminInvite" | "personal" | null
+  >(null);
+  const requestedAdminInviteRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !canShareAdminInvite ||
+      !membershipToken ||
+      !onCreateAdminInviteToken ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+    if (requestedAdminInviteRef.current === membershipToken) {
+      return;
+    }
+
+    requestedAdminInviteRef.current = membershipToken;
+    const origin = window.location.origin;
+    onCreateAdminInviteToken(membershipToken)
+      .then((result) => {
+        setAdminInvite({
+          membershipToken,
+          url: buildAbsoluteAppUrl(
+            routes.adminInvite(meetingSlug, result.adminInviteToken),
+            origin,
+          ),
+        });
+        setAdminInviteError(null);
+      })
+      .catch(() => {
+        requestedAdminInviteRef.current = null;
+        setAdminInviteError("Unable to prepare the admin invite link.");
+      });
+  }, [canShareAdminInvite, meetingSlug, membershipToken, onCreateAdminInviteToken]);
+
+  const adminInviteUrl =
+    adminInvite?.membershipToken === membershipToken ? adminInvite.url : null;
+
+  async function copyLink(
+    kind: "public" | "adminInvite" | "personal",
+    value: string | null,
+  ) {
+    if (!value) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedLink(kind);
+    } catch {
+      onCopyError();
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Meeting Links</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {publicParticipantUrl ? (
+          <LinkField
+            label="Regular invite link"
+            value={publicParticipantUrl}
+            copied={copiedLink === "public"}
+            onCopy={() => copyLink("public", publicParticipantUrl)}
+          />
+        ) : null}
+
+        {canShareAdminInvite ? (
+          <LinkField
+            label="Admin invite link"
+            value={adminInviteUrl ?? ""}
+            copied={copiedLink === "adminInvite"}
+            disabled={!adminInviteUrl}
+            placeholder="Preparing admin invite..."
+            onCopy={() => copyLink("adminInvite", adminInviteUrl)}
+          />
+        ) : null}
+
+        {canShareAdminInvite && adminInviteError ? (
+          <StatusMessage tone="error">{adminInviteError}</StatusMessage>
+        ) : null}
+
+        {personalMembershipUrl ? (
+          <div className="border-t border-border pt-4">
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+              Your private return link is only for you. Do not share it as an invite.
+            </div>
+            <LinkField
+              label="Private return link"
+              value={personalMembershipUrl}
+              copied={copiedLink === "personal"}
+              onCopy={() => copyLink("personal", personalMembershipUrl)}
+            />
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LinkField({
+  label,
+  value,
+  copied,
+  onCopy,
+  disabled = false,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      <div className="flex min-w-0 gap-2">
+        <input
+          className={cn(inputClassName, "min-w-0")}
+          readOnly
+          disabled={disabled}
+          value={value}
+          placeholder={placeholder}
+          aria-label={label}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="shrink-0"
+          aria-label={`Copy ${label}`}
+          disabled={disabled}
+          onClick={onCopy}
+        >
+          {copied ? (
+            <Check className="size-4 text-accent" aria-hidden="true" />
+          ) : (
+            <Clipboard className="size-4" aria-hidden="true" />
+          )}
+        </Button>
       </div>
     </div>
   );

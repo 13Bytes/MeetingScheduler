@@ -1,11 +1,12 @@
 export const TOKEN_RANDOM_BYTES = 32;
 
-export type SecretTokenKind = "membership" | "magicLink" | "api";
+export type SecretTokenKind = "membership" | "magicLink" | "api" | "adminInvite";
 
 const TOKEN_PREFIXES: Record<SecretTokenKind, string> = {
   membership: "ms_member",
   magicLink: "ms_magic",
   api: "ms_api",
+  adminInvite: "ms_admin_invite",
 };
 
 const TOKEN_HASH_CONTEXT = "meeting-scheduler:secret-token:v1";
