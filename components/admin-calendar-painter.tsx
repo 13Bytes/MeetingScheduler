@@ -564,7 +564,7 @@ function CalendarCellButton({
       }`}
       title={`${cell.dayLabel} ${cell.timeLabel}`}
       className={cn(
-        "min-h-9 touch-manipulation select-none border-b border-r border-border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed sm:min-h-7",
+        "min-h-9 touch-manipulation select-none border-b border-r border-border outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed sm:min-h-7",
         isAllowed ? "bg-teal-500 hover:bg-teal-600" : "bg-surface hover:bg-blue-50",
         cell.isWeekend && !isAllowed && "bg-slate-50",
         isPreview && previewClass,

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import type React from "react";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { AdminCalendarPainter } from "@/components/admin-calendar-painter";
 import { MembershipIdentityPanel } from "@/components/membership-identity-panel";
@@ -107,6 +107,8 @@ type CreateAdminInviteToken = (
   membershipToken: string,
 ) => Promise<{ adminInviteToken: string }>;
 
+const adminInviteUrlCache = new Map<string, string>();
+
 export function ConnectedPublicParticipantMeeting({
   meetingSlug,
   adminInviteToken,
@@ -114,12 +116,16 @@ export function ConnectedPublicParticipantMeeting({
   meetingSlug: string;
   adminInviteToken?: string;
 }) {
+  const [clientAdminInviteToken] = useState(
+    () =>
+      adminInviteToken ??
+      (typeof window === "undefined" ? null : readAdminInviteTokenFromLocation()),
+  );
   const [rememberedMembershipToken, setRememberedMembershipToken] = useState(() =>
     typeof window === "undefined" ? null : readRememberedMembershipToken(meetingSlug),
   );
-  const activeRememberedMembershipToken = adminInviteToken
-    ? null
-    : rememberedMembershipToken;
+  const activeAdminInviteToken = clientAdminInviteToken ?? undefined;
+  const activeRememberedMembershipToken = rememberedMembershipToken;
   const meetingData = useQuery(api.meetings.readPublicMeetingBySlug, {
     slug: meetingSlug,
   });
@@ -148,6 +154,18 @@ export function ConnectedPublicParticipantMeeting({
       : null;
 
   useEffect(() => {
+    if (adminInviteToken || !readAdminInviteTokenFromLocation()) {
+      return;
+    }
+
+    window.history.replaceState(
+      window.history.state,
+      "",
+      buildUrlWithoutAdminInviteToken(),
+    );
+  }, [adminInviteToken]);
+
+  useEffect(() => {
     if (!activeRememberedMembershipToken) {
       return;
     }
@@ -158,10 +176,11 @@ export function ConnectedPublicParticipantMeeting({
       return;
     }
 
-    window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       forgetRememberedMembershipToken(meetingSlug);
       setRememberedMembershipToken(null);
     }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [activeRememberedMembershipToken, meetingSlug, rememberedMeetingData]);
 
   if (
@@ -220,12 +239,12 @@ export function ConnectedPublicParticipantMeeting({
         ownAvailabilityRecords: [],
         results: meetingData.results,
       }}
-      adminInviteToken={adminInviteToken}
+      adminInviteToken={activeAdminInviteToken}
       onCreateMembership={async (displayName) => {
-        if (adminInviteToken) {
+        if (activeAdminInviteToken) {
           return createAdminMembershipFromInvite({
             meetingSlug: meetingData.meeting.slug,
-            adminInviteToken,
+            adminInviteToken: activeAdminInviteToken,
             displayName,
             privacyMode: "detailed",
             clientRateLimitKey: getAnonymousClientRateLimitKey(),
@@ -789,6 +808,24 @@ export function ParticipantAvailabilityPainter({
   );
 }
 
+function readAdminInviteTokenFromLocation(): string | null {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const hashToken = hashParams.get("adminInviteToken");
+  if (hashToken) {
+    return hashToken;
+  }
+
+  const queryParams = new URLSearchParams(window.location.search);
+  return queryParams.get("adminInviteToken");
+}
+
+function buildUrlWithoutAdminInviteToken(): string {
+  const queryParams = new URLSearchParams(window.location.search);
+  queryParams.delete("adminInviteToken");
+  const queryString = queryParams.toString();
+  return `${window.location.pathname}${queryString ? `?${queryString}` : ""}`;
+}
+
 function MeetingLinksPanel({
   publicParticipantUrl,
   personalMembershipUrl,
@@ -811,10 +848,60 @@ function MeetingLinksPanel({
     url: string;
   } | null>(null);
   const [adminInviteError, setAdminInviteError] = useState<string | null>(null);
+  const [isPreparingAdminInvite, setIsPreparingAdminInvite] = useState(false);
   const [copiedLink, setCopiedLink] = useState<
     "public" | "adminInvite" | "personal" | null
   >(null);
   const requestedAdminInviteRef = useRef<string | null>(null);
+
+  const prepareAdminInvite = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      if (
+        !canShareAdminInvite ||
+        !membershipToken ||
+        !onCreateAdminInviteToken ||
+        typeof window === "undefined"
+      ) {
+        return;
+      }
+
+      const cacheKey = `${meetingSlug}:${membershipToken}`;
+      const cachedUrl = force ? null : adminInviteUrlCache.get(cacheKey);
+      if (cachedUrl) {
+        setAdminInvite({ membershipToken, url: cachedUrl });
+        setAdminInviteError(null);
+        return;
+      }
+      if (requestedAdminInviteRef.current === membershipToken && !force) {
+        return;
+      }
+
+      requestedAdminInviteRef.current = membershipToken;
+      setIsPreparingAdminInvite(true);
+      try {
+        const result = await onCreateAdminInviteToken(membershipToken);
+        const origin = window.location.origin;
+        const url = buildAbsoluteAppUrl(
+          routes.adminInvite(meetingSlug, result.adminInviteToken),
+          origin,
+        );
+        adminInviteUrlCache.set(cacheKey, url);
+        setAdminInvite({ membershipToken, url });
+        setAdminInviteError(null);
+      } catch {
+        requestedAdminInviteRef.current = null;
+        setAdminInviteError("Unable to prepare the admin invite link.");
+      } finally {
+        setIsPreparingAdminInvite(false);
+      }
+    },
+    [
+      canShareAdminInvite,
+      meetingSlug,
+      membershipToken,
+      onCreateAdminInviteToken,
+    ],
+  );
 
   useEffect(() => {
     if (
@@ -829,24 +916,8 @@ function MeetingLinksPanel({
       return;
     }
 
-    requestedAdminInviteRef.current = membershipToken;
-    const origin = window.location.origin;
-    onCreateAdminInviteToken(membershipToken)
-      .then((result) => {
-        setAdminInvite({
-          membershipToken,
-          url: buildAbsoluteAppUrl(
-            routes.adminInvite(meetingSlug, result.adminInviteToken),
-            origin,
-          ),
-        });
-        setAdminInviteError(null);
-      })
-      .catch(() => {
-        requestedAdminInviteRef.current = null;
-        setAdminInviteError("Unable to prepare the admin invite link.");
-      });
-  }, [canShareAdminInvite, meetingSlug, membershipToken, onCreateAdminInviteToken]);
+    void prepareAdminInvite();
+  }, [canShareAdminInvite, membershipToken, onCreateAdminInviteToken, prepareAdminInvite]);
 
   const adminInviteUrl =
     adminInvite?.membershipToken === membershipToken ? adminInvite.url : null;
@@ -893,7 +964,20 @@ function MeetingLinksPanel({
         ) : null}
 
         {canShareAdminInvite && adminInviteError ? (
-          <StatusMessage tone="error">{adminInviteError}</StatusMessage>
+          <div className="grid gap-2">
+            <StatusMessage tone="error">{adminInviteError}</StatusMessage>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={isPreparingAdminInvite}
+              onClick={() => void prepareAdminInvite({ force: true })}
+            >
+              {isPreparingAdminInvite ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              Retry admin invite
+            </Button>
+          </div>
         ) : null}
 
         {personalMembershipUrl ? (

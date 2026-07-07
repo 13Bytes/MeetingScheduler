@@ -1,7 +1,56 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { ParticipantAvailabilityPainter } from "@/components/participant-availability-painter";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ConnectedPublicParticipantMeeting,
+  ParticipantAvailabilityPainter,
+} from "@/components/participant-availability-painter";
 import type { MeetingResults } from "@/lib/meeting-results";
+
+const {
+  createAdminMembershipFromInviteMock,
+  createParticipantMembershipMock,
+  createAdminInviteTokenMock,
+  finalizeMeetingMock,
+  reopenMeetingMock,
+  saveAvailabilityRecordsMock,
+  updateMembershipDisplayNameMock,
+  useMutationMock,
+  useQueryMock,
+} = vi.hoisted(() => ({
+  createAdminMembershipFromInviteMock: vi.fn(),
+  createParticipantMembershipMock: vi.fn(),
+  createAdminInviteTokenMock: vi.fn(),
+  finalizeMeetingMock: vi.fn(),
+  reopenMeetingMock: vi.fn(),
+  saveAvailabilityRecordsMock: vi.fn(),
+  updateMembershipDisplayNameMock: vi.fn(),
+  useMutationMock: vi.fn(),
+  useQueryMock: vi.fn(),
+}));
+
+vi.mock("convex/react", () => ({
+  useMutation: useMutationMock,
+  useQuery: useQueryMock,
+}));
+
+vi.mock("@/convex/_generated/api", () => ({
+  api: {
+    meetings: {
+      createParticipantMembership: "meetings:createParticipantMembership",
+      createAdminMembershipFromInvite: "meetings:createAdminMembershipFromInvite",
+      createAdminInviteToken: "meetings:createAdminInviteToken",
+      saveAvailabilityRecords: "meetings:saveAvailabilityRecords",
+      updateMembershipDisplayName: "meetings:updateMembershipDisplayName",
+      finalizeMeeting: "meetings:finalizeMeeting",
+      reopenMeeting: "meetings:reopenMeeting",
+      readPublicMeetingBySlug: "meetings:readPublicMeetingBySlug",
+      readParticipantMeetingByMembershipToken:
+        "meetings:readParticipantMeetingByMembershipToken",
+      readMeetingByMembershipToken: "meetings:readMeetingByMembershipToken",
+      updateMeetingSettings: "meetings:updateMeetingSettings",
+    },
+  },
+}));
 
 const meeting = {
   title: "Team planning",
@@ -78,6 +127,45 @@ const results: MeetingResults = {
 };
 
 describe("ParticipantAvailabilityPainter", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.cookie = "ms_membership_team-planning=; Path=/; Max-Age=0; SameSite=Lax";
+    window.history.replaceState(null, "", "/");
+    createAdminMembershipFromInviteMock.mockReset();
+    createParticipantMembershipMock.mockReset();
+    createAdminInviteTokenMock.mockReset();
+    finalizeMeetingMock.mockReset();
+    reopenMeetingMock.mockReset();
+    saveAvailabilityRecordsMock.mockReset();
+    updateMembershipDisplayNameMock.mockReset();
+    useQueryMock.mockReset();
+    useMutationMock.mockReset();
+    useMutationMock.mockImplementation((functionReference) => {
+      if (functionReference === "meetings:createParticipantMembership") {
+        return createParticipantMembershipMock;
+      }
+      if (functionReference === "meetings:createAdminMembershipFromInvite") {
+        return createAdminMembershipFromInviteMock;
+      }
+      if (functionReference === "meetings:createAdminInviteToken") {
+        return createAdminInviteTokenMock;
+      }
+      if (functionReference === "meetings:saveAvailabilityRecords") {
+        return saveAvailabilityRecordsMock;
+      }
+      if (functionReference === "meetings:updateMembershipDisplayName") {
+        return updateMembershipDisplayNameMock;
+      }
+      if (functionReference === "meetings:finalizeMeeting") {
+        return finalizeMeetingMock;
+      }
+      if (functionReference === "meetings:reopenMeeting") {
+        return reopenMeetingMock;
+      }
+      return vi.fn();
+    });
+  });
+
   it("requires a display name before creating a public-link membership", async () => {
     render(
       <ParticipantAvailabilityPainter
@@ -110,6 +198,90 @@ describe("ParticipantAvailabilityPainter", () => {
     );
     expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
     expect(screen.queryByRole("textbox", { name: /private return link/i })).toBeNull();
+  });
+
+  it("uses a client-side admin invite token when joining from an invite link", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/m/team-planning#adminInviteToken=admin-invite-secret",
+    );
+    useQueryMock.mockImplementation((_query, args) =>
+      args === "skip"
+        ? null
+        : {
+            meeting,
+            capabilities: {
+              canAdminister: false,
+              canEditAvailability: true,
+            },
+            results,
+          },
+    );
+    createAdminMembershipFromInviteMock.mockResolvedValue({
+      membershipToken: "admin-member-secret-token",
+    });
+
+    render(<ConnectedPublicParticipantMeeting meetingSlug="team-planning" />);
+
+    await waitFor(() => expect(window.location.hash).toBe(""));
+    fireEvent.change(screen.getByLabelText(/display name/i), {
+      target: { value: "Grace Hopper" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /join and save/i }));
+
+    await waitFor(() =>
+      expect(createAdminMembershipFromInviteMock).toHaveBeenCalledWith({
+        meetingSlug: "team-planning",
+        adminInviteToken: "admin-invite-secret",
+        displayName: "Grace Hopper",
+        privacyMode: "detailed",
+        clientRateLimitKey: expect.any(String),
+      }),
+    );
+  });
+
+  it("keeps a valid remembered membership when an admin invite is present", () => {
+    window.localStorage.setItem(
+      "meeting-scheduler.membership-token.team-planning",
+      "remembered-member-token",
+    );
+    window.history.replaceState(
+      null,
+      "",
+      "/m/team-planning#adminInviteToken=admin-invite-secret",
+    );
+    useQueryMock.mockImplementation((_query, args) => {
+      if (args && args !== "skip" && "membershipToken" in args) {
+        return {
+          meeting,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          capabilities: {
+            canAdminister: false,
+            canEditAvailability: true,
+          },
+          ownAvailabilityRecords: [],
+          results,
+        };
+      }
+      return {
+        meeting,
+        capabilities: {
+          canAdminister: false,
+          canEditAvailability: true,
+        },
+        results,
+      };
+    });
+
+    render(<ConnectedPublicParticipantMeeting meetingSlug="team-planning" />);
+
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      { membershipToken: "remembered-member-token" },
+    );
+    expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
   });
 
   it("shows the availability workflow before results until the viewer has voted", () => {
@@ -223,7 +395,7 @@ describe("ParticipantAvailabilityPainter", () => {
       "http://localhost:3000/m/team-planning",
     );
     expect(screen.getByRole("textbox", { name: /admin invite link/i })).toHaveValue(
-      "http://localhost:3000/m/team-planning?adminInviteToken=admin-invite-secret",
+      "http://localhost:3000/m/team-planning#adminInviteToken=admin-invite-secret",
     );
     expect(screen.getByRole("textbox", { name: /private return link/i })).toHaveValue(
       "http://localhost:3000/join/admin-secret-token",

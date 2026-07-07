@@ -182,10 +182,7 @@ export function MembershipIdentityPanel({
                 <Mail className="size-4" aria-hidden="true" />
               )}
               Send verification link
-            </Button>
-            <Button asChild variant="ghost" className="w-full">
-              <Link href="/identity">Email recovery page</Link>
-            </Button>
+              </Button>
           </div>
         )}
         {status ? (

@@ -76,6 +76,7 @@ export default defineSchema({
     createdByMembershipId: v.id("memberships"),
     ...tokenFieldsValidator,
     tokenLastUsedAt: v.optional(v.number()),
+    expiresAt: v.number(),
     revokedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -83,6 +84,7 @@ export default defineSchema({
     .index("by_meeting", ["meetingId"])
     .index("by_token_hash", ["tokenHash"])
     .index("by_created_at", ["createdAt"])
+    .index("by_expiration", ["expiresAt"])
     .index("by_revoked_at", ["revokedAt"]),
 
   allowedTimeRanges: defineTable({

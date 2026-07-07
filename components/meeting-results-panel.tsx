@@ -8,7 +8,7 @@ import {
   RotateCcw,
   SmilePlus,
   UsersRound,
-  CircleUserRound
+  CircleUserRound,
 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -52,8 +52,7 @@ export function MeetingResultsPanel({
   const heatmapCandidates = results.candidates.filter(
     (candidate) => candidate.availableParticipantCount > 0,
   );
-  const shouldShowShortlist =
-    hasVotes && !selectedSlot && (recommendedShortlist.length > 0 || !hasCandidates);
+  const shouldShowShortlist = hasVotes && !selectedSlot;
   const shouldShowWaitingState = hasParticipants && !hasVotes && !selectedSlot;
   const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
   const [status, setStatus] = useState<{
@@ -159,6 +158,9 @@ export function MeetingResultsPanel({
             <CardContent className="space-y-4 pt-5">
               {hasParticipants && !hasCandidates ? (
                 <EmptyResultsMessage message="No candidate slots fit inside the current admin-allowed ranges." />
+              ) : null}
+              {hasParticipants && hasCandidates && recommendedShortlist.length === 0 ? (
+                <EmptyResultsMessage message="No candidate slots have any attendees yet." />
               ) : null}
               {recommendedShortlist.map((candidate) => (
                 <CandidateRow
@@ -332,7 +334,11 @@ function VotedParticipantsCard({ results }: { results: MeetingResults }) {
           <div className="flex flex-wrap gap-2">
             {votedParticipants.map((participant) => (
               <Badge key={participant.membershipId} className="gap-2">
-                <CircleUserRound data-icon="inline-start" className="size-4" />
+                <CircleUserRound
+                  data-icon="inline-start"
+                  className="size-4"
+                  aria-hidden="true"
+                />
                 {participant.displayName ?? "Unnamed participant"}
               </Badge>
             ))}

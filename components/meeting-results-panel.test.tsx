@@ -96,6 +96,34 @@ describe("MeetingResultsPanel", () => {
     expect(screen.queryByText("0/2")).not.toBeInTheDocument();
   });
 
+  it("shows an empty shortlist state when all candidates have zero attendees", () => {
+    const unavailableCandidate: ScoredCandidateSlot = {
+      ...candidateFixture,
+      availableParticipantCount: 0,
+      unavailableParticipantCount: 2,
+      reluctantVoteCount: 0,
+      yesVoteCount: 0,
+      scorePercent: 0,
+      participantDetails: [],
+    };
+
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidates: [unavailableCandidate],
+          shortlist: [unavailableCandidate],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/no candidate slots have any attendees yet/i).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/0 of 2 can attend/i)).not.toBeInTheDocument();
+  });
+
   it("does not render individual names for summary-only payloads", () => {
     const summaryOnlyDetailedResults = { ...detailedResults };
     delete summaryOnlyDetailedResults.votedParticipants;

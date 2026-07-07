@@ -60,6 +60,7 @@ const EMAIL_VERIFICATION_REQUEST_COOLDOWN_MS = 5 * 60 * 1000;
 const NOTIFICATION_DELIVERY_LEASE_MS = 15 * 60 * 1000;
 const MAX_NOTIFICATION_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const ADMIN_INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -474,6 +475,7 @@ export const createAdminInviteToken = mutation({
       tokenFingerprint: adminInviteToken.tokenFingerprint,
       tokenVersion: 1,
       tokenCreatedAt: now,
+      expiresAt: now + ADMIN_INVITE_TOKEN_TTL_MS,
       createdAt: now,
       updatedAt: now,
     });
@@ -531,7 +533,7 @@ export const createAdminMembershipFromInvite = mutation({
       throw new Error("This meeting does not require an admin invite");
     }
 
-    const adminInvite = await requireAdminInviteToken(ctx, args.adminInviteToken);
+    const adminInvite = await requireAdminInviteToken(ctx, args.adminInviteToken, now);
     if (adminInvite.meetingId !== meeting._id) {
       throw new Error("Admin invite does not belong to this meeting");
     }
@@ -1731,7 +1733,11 @@ async function requireMembershipByToken(ctx: MutationLikeCtx, membershipToken: s
   return membership;
 }
 
-async function requireAdminInviteToken(ctx: MutationLikeCtx, adminInviteToken: string) {
+async function requireAdminInviteToken(
+  ctx: MutationLikeCtx,
+  adminInviteToken: string,
+  now: number,
+) {
   const tokenHash = await hashSecretToken(adminInviteToken);
   const adminInvite = await ctx.db
     .query("adminInviteTokens")
@@ -1739,6 +1745,9 @@ async function requireAdminInviteToken(ctx: MutationLikeCtx, adminInviteToken: s
     .unique();
   if (!adminInvite || adminInvite.revokedAt !== undefined) {
     throw new Error("Admin invite link is invalid or revoked");
+  }
+  if (adminInvite.expiresAt <= now) {
+    throw new Error("Admin invite link is expired");
   }
   return adminInvite;
 }

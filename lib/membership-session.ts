@@ -28,14 +28,14 @@ export function rememberMembershipToken(meetingSlug: string, membershipToken: st
     window.localStorage.setItem(buildStorageKey(meetingSlug), trimmedToken);
   } catch {
     // The cookie still gives us a refresh-safe fallback when storage is unavailable.
+    document.cookie = [
+      `${buildCookieName(meetingSlug)}=${encodeURIComponent(trimmedToken)}`,
+      "Path=/",
+      `Max-Age=${maxAgeSeconds}`,
+      "SameSite=Lax",
+      ...(window.location.protocol === "https:" ? ["Secure"] : []),
+    ].join("; ");
   }
-
-  document.cookie = [
-    `${buildCookieName(meetingSlug)}=${encodeURIComponent(trimmedToken)}`,
-    "Path=/",
-    `Max-Age=${maxAgeSeconds}`,
-    "SameSite=Lax",
-  ].join("; ");
 }
 
 export function forgetRememberedMembershipToken(meetingSlug: string) {

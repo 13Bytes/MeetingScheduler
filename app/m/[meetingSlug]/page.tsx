@@ -5,25 +5,16 @@ import { RoutePlaceholder } from "@/components/route-placeholder";
 
 export default async function MeetingPollPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ meetingSlug: string }>;
-  searchParams?: Promise<{ adminInviteToken?: string | string[] }>;
 }) {
   const { meetingSlug } = await params;
-  const query = searchParams ? await searchParams : {};
-  const adminInviteToken = Array.isArray(query.adminInviteToken)
-    ? query.adminInviteToken[0]
-    : query.adminInviteToken;
   const isConvexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
 
   return (
     <AppShell>
       {isConvexConfigured ? (
-        <ConnectedPublicParticipantMeeting
-          meetingSlug={meetingSlug}
-          adminInviteToken={adminInviteToken}
-        />
+        <ConnectedPublicParticipantMeeting meetingSlug={meetingSlug} />
       ) : (
         <RoutePlaceholder
           icon={UsersRound}

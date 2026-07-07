@@ -54,7 +54,7 @@ describe("NewMeetingForm", () => {
       adminMembershipToken: "admin-secret",
     });
 
-    render(<NewMeetingForm createMeeting={createMeeting} />);
+    render(<NewMeetingForm createMeeting={createMeeting} assignLocation={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Team planning" },
@@ -69,6 +69,25 @@ describe("NewMeetingForm", () => {
       expect.objectContaining({
         creatorEmail: "Ada@Example.COM",
       }),
+    );
+  });
+
+  it("uses window.location.assign when no redirect callback is provided", async () => {
+    const createMeeting = vi.fn().mockResolvedValue({
+      slug: "team-planning",
+      adminMembershipToken: "admin-secret",
+    });
+    const assign = vi.fn();
+
+    render(<NewMeetingForm createMeeting={createMeeting} assignLocation={assign} />);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Team planning" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
+
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith("http://localhost:3000/join/admin-secret"),
     );
   });
 

@@ -41,9 +41,11 @@ type CreateMeetingResult = {
 export function NewMeetingForm({
   createMeeting,
   onCreatedRedirect,
+  assignLocation = (url) => window.location.assign(url),
 }: {
   createMeeting?: (args: CreateMeetingArgs) => Promise<CreateMeetingResult>;
   onCreatedRedirect?: (adminMembershipUrl: string) => void;
+  assignLocation?: (adminMembershipUrl: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -157,7 +159,7 @@ export function NewMeetingForm({
       if (onCreatedRedirect) {
         onCreatedRedirect(links.adminMembershipUrl);
       } else {
-        window.location.assign(links.adminMembershipUrl);
+        assignLocation(links.adminMembershipUrl);
       }
     } catch (caughtError) {
       setError(
@@ -165,7 +167,6 @@ export function NewMeetingForm({
           ? caughtError.message
           : "Meeting creation failed. Please try again.",
       );
-    } finally {
       setIsSubmitting(false);
     }
   }
