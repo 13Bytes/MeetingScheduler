@@ -2,6 +2,7 @@ import { KeyRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ConnectedMembershipAvailability } from "@/components/participant-availability-painter";
 import { RoutePlaceholder } from "@/components/route-placeholder";
+import { UserMembershipImporter } from "@/components/user-membership-importer";
 
 export default async function JoinByMembershipLinkPage({
   params,
@@ -13,6 +14,7 @@ export default async function JoinByMembershipLinkPage({
 
   return (
     <AppShell>
+      <UserMembershipImporter membershipTokens={[membershipToken]} />
       {isConvexConfigured ? (
         <ConnectedMembershipAvailability membershipToken={membershipToken} />
       ) : (

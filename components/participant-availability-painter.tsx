@@ -419,6 +419,7 @@ export function ParticipantAvailabilityPainter({
     useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
+  const importedMembershipTokenRef = useRef<string | null>(null);
 
   const membershipToken = existingMembershipToken ?? createdMembershipToken;
   const canEdit =
@@ -515,6 +516,24 @@ export function ParticipantAvailabilityPainter({
 
     onMembershipTokenAvailable(membershipToken, meeting.slug);
   }, [meeting.slug, membershipToken, onMembershipTokenAvailable]);
+
+  useEffect(() => {
+    if (
+      !membershipToken ||
+      membershipToken !== createdMembershipToken ||
+      importedMembershipTokenRef.current === membershipToken
+    ) {
+      return;
+    }
+    importedMembershipTokenRef.current = membershipToken;
+    void fetch("/api/user/import-memberships", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ membershipTokens: [membershipToken] }),
+    }).catch(() => {
+      importedMembershipTokenRef.current = null;
+    });
+  }, [createdMembershipToken, membershipToken]);
 
   async function handleSave() {
     setError(null);

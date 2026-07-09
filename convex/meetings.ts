@@ -24,7 +24,6 @@ import {
   assertCanAttachEmailIdentityToMembership,
   assertMagicLinkCanBeConsumed,
   assertVerifiedEmailIdentity,
-  filterRecoverableDashboardMemberships,
   isMembershipRecoverable,
   normalizeMagicLinkExpiry,
 } from "./domain/identity";
@@ -78,6 +77,118 @@ const meetingSettingsArgs = {
   ),
 };
 
+export const ensureUser = mutation({
+  args: {
+    internalSecret: v.string(),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = Date.now();
+    if (args.userId) {
+      const existingUser = await ctx.db.get(args.userId);
+      if (existingUser) {
+        await ctx.db.patch(existingUser._id, {
+          lastSeenAt: now,
+          updatedAt: now,
+        });
+        return { userId: existingUser._id, created: false };
+      }
+    }
+
+    const userId = await ctx.db.insert("users", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+    });
+    return { userId, created: true };
+  },
+});
+
+export const readUserSession = query({
+  args: {
+    internalSecret: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      return { status: "stale" as const };
+    }
+
+    const verifiedEmails = await listVerifiedEmailsForUser(ctx, user._id);
+    return {
+      status: "active" as const,
+      userId: user._id,
+      verifiedEmails,
+    };
+  },
+});
+
+export const attachMembershipTokensToUser = mutation({
+  args: {
+    internalSecret: v.string(),
+    userId: v.id("users"),
+    membershipTokens: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User session is stale");
+    }
+
+    const now = Date.now();
+    const importedMembershipIds: Id<"memberships">[] = [];
+    const ignoredTokenFingerprints: string[] = [];
+    const uniqueTokens = Array.from(
+      new Set(args.membershipTokens.map((token) => token.trim()).filter(Boolean)),
+    ).slice(0, 50);
+
+    for (const membershipToken of uniqueTokens) {
+      const tokenHash = await hashSecretToken(membershipToken);
+      const tokenFingerprint = tokenFingerprintFromHash(tokenHash);
+      const resolved = await resolveMembershipByTokenHash(ctx, tokenHash);
+      if (!resolved) {
+        ignoredTokenFingerprints.push(tokenFingerprint);
+        continue;
+      }
+
+      const { membership, accessTokenId } = resolved;
+      if (membership.userId !== user._id) {
+        await ctx.db.patch(membership._id, {
+          userId: user._id,
+          tokenLastUsedAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.patch(membership._id, {
+          tokenLastUsedAt: now,
+          updatedAt: now,
+        });
+      }
+      if (accessTokenId) {
+        await ctx.db.patch(accessTokenId, {
+          tokenLastUsedAt: now,
+          updatedAt: now,
+        });
+      }
+      importedMembershipIds.push(membership._id);
+    }
+
+    await ctx.db.patch(user._id, {
+      lastSeenAt: now,
+      updatedAt: now,
+    });
+    return {
+      userId: user._id,
+      importedMembershipIds,
+      ignoredTokenFingerprints,
+    };
+  },
+});
+
 export const createMeeting = mutation({
   args: {
     title: v.string(),
@@ -89,9 +200,16 @@ export const createMeeting = mutation({
     creatorPrivacyMode: v.optional(privacyModeValidator),
     adminMode: v.optional(adminModeValidator),
     settings: v.optional(v.object(meetingSettingsArgs)),
+    internalSecret: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const userId = await resolveTrustedUserId(ctx, {
+      internalSecret: args.internalSecret,
+      userId: args.userId,
+      now,
+    });
     const title = normalizeMeetingTitle(args.title);
     const settings = normalizeMeetingSettings(args.settings);
     await assertConvexRateLimit(ctx, {
@@ -134,7 +252,7 @@ export const createMeeting = mutation({
     }
 
     const emailIdentityId = args.creatorEmail
-      ? await upsertEmailIdentity(ctx, args.creatorEmail, args.creatorName, now)
+      ? await upsertEmailIdentity(ctx, args.creatorEmail, args.creatorName, now, userId)
       : undefined;
 
     const meetingId = await ctx.db.insert("meetings", {
@@ -155,6 +273,7 @@ export const createMeeting = mutation({
     const adminMembershipId = await ctx.db.insert("memberships", {
       meetingId,
       emailIdentityId,
+      userId,
       displayName: args.creatorName?.trim(),
       role: "admin",
       privacyMode: args.creatorPrivacyMode ?? "detailed",
@@ -1311,41 +1430,24 @@ export const completeEmailVerification = mutation({
     magicLinkToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const tokenHash = await hashSecretToken(args.magicLinkToken);
-    await assertConvexRateLimit(ctx, {
-      scope: "magic_link.verify",
-      key: tokenFingerprintFromHash(tokenHash),
-      limit: 10,
-      windowMs: RATE_LIMIT_WINDOW_MS,
-      now,
+    return await completeEmailVerificationForUserId(ctx, {
+      magicLinkToken: args.magicLinkToken,
     });
-    const magicLink = await ctx.db
-      .query("magicLinks")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
-      .unique();
+  },
+});
 
-    assertMagicLinkCanBeConsumed(magicLink, now);
-    if (magicLink.purpose !== "emailVerification" || !magicLink.emailIdentityId) {
-      throw new Error("Magic link cannot verify an email identity");
-    }
-
-    const identity = await ctx.db.get(magicLink.emailIdentityId);
-    if (!identity) {
-      throw new Error("Email identity not found");
-    }
-
-    await ctx.db.patch(magicLink._id, { consumedAt: now });
-    await ctx.db.patch(identity._id, {
-      verifiedAt: identity.verifiedAt ?? now,
-      updatedAt: now,
+export const completeEmailVerificationForUser = mutation({
+  args: {
+    internalSecret: v.string(),
+    magicLinkToken: v.string(),
+    currentUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    return await completeEmailVerificationForUserId(ctx, {
+      magicLinkToken: args.magicLinkToken,
+      currentUserId: args.currentUserId,
     });
-
-    return {
-      emailIdentityId: identity._id,
-      normalizedEmail: identity.normalizedEmail,
-      verifiedAt: identity.verifiedAt ?? now,
-    };
   },
 });
 
@@ -1379,6 +1481,7 @@ export const attachVerifiedEmailIdentityToMembership = mutation({
 
     await ctx.db.patch(membership._id, {
       emailIdentityId: args.emailIdentityId,
+      userId: identity.userId,
       updatedAt: now,
     });
     await insertAuditEvent(ctx, {
@@ -1398,6 +1501,54 @@ export const attachVerifiedEmailIdentityToMembership = mutation({
   },
 });
 
+export const listUserDashboard = query({
+  args: {
+    internalSecret: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User session is stale");
+    }
+
+    const verifiedEmails = await listVerifiedEmailsForUser(ctx, user._id);
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const rows = await buildDashboardMembershipRows(ctx, memberships);
+
+    return {
+      user: {
+        userId: user._id,
+      },
+      identity: {
+        normalizedEmail:
+          verifiedEmails.map((identity) => identity.normalizedEmail).join(", ") ||
+          "this browser session",
+      },
+      verifiedEmails,
+      memberships: rows
+        .filter((row) => row.revokedAt === undefined)
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .map((row) => ({
+          membershipId: row._id,
+          role: row.role,
+          displayName: row.displayName,
+          hasAvailability: row.hasAvailability,
+          canRecover: isMembershipRecoverable({
+            role: row.role,
+            revokedAt: row.revokedAt,
+            hasAvailability: row.hasAvailability,
+          }),
+          meeting: row.meeting,
+        })),
+    };
+  },
+});
+
 export const listIdentityDashboard = query({
   args: {
     internalSecret: v.string(),
@@ -1412,65 +1563,28 @@ export const listIdentityDashboard = query({
       .query("memberships")
       .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", identity._id))
       .collect();
-    const rows: {
-      _id: Id<"memberships">;
-      meetingId: Id<"meetings">;
-      role: MembershipRole;
-      displayName?: string;
-      revokedAt?: number;
-      updatedAt: number;
-      hasAvailability: boolean;
-      meeting: ReturnType<typeof redactPublicMeeting>;
-    }[] = [];
-    for (const membership of memberships) {
-      const meeting = await ctx.db.get(membership.meetingId);
-      if (!meeting) {
-        continue;
-      }
-      const availability = await ctx.db
-        .query("availabilityRecords")
-        .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
-        .first();
-      rows.push({
-        _id: membership._id,
-        meetingId: membership.meetingId,
-        role: membership.role,
-        displayName: membership.displayName,
-        revokedAt: membership.revokedAt,
-        updatedAt: membership.updatedAt,
-        hasAvailability: Boolean(availability),
-        meeting: redactPublicMeeting(meeting),
-      });
-    }
-
-    const recoverableMembershipIds = new Set(
-      filterRecoverableDashboardMemberships(
-        rows.map((row) => ({
-          _id: row._id,
-          meetingId: row.meetingId,
-          role: row.role,
-          displayName: row.displayName,
-          revokedAt: row.revokedAt,
-          updatedAt: row.updatedAt,
-          hasAvailability: row.hasAvailability,
-        })),
-      ).map((membership) => membership._id),
-    );
+    const rows = await buildDashboardMembershipRows(ctx, memberships);
 
     return {
       identity: {
         emailIdentityId: identity._id,
         normalizedEmail: identity.normalizedEmail,
         verifiedAt: identity.verifiedAt,
+        userId: identity.userId,
       },
       memberships: rows
-        .filter((row) => recoverableMembershipIds.has(row._id))
+        .filter((row) => row.revokedAt === undefined)
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .map((row) => ({
           membershipId: row._id,
           role: row.role,
           displayName: row.displayName,
           hasAvailability: row.hasAvailability,
+          canRecover: isMembershipRecoverable({
+            role: row.role,
+            revokedAt: row.revokedAt,
+            hasAvailability: row.hasAvailability,
+          }),
           meeting: row.meeting,
         })),
     };
@@ -1586,6 +1700,267 @@ export const createRecoveredMembershipLink = mutation({
   },
 });
 
+export const createRecoveredUserMembershipLink = mutation({
+  args: {
+    internalSecret: v.string(),
+    userId: v.id("users"),
+    membershipId: v.id("memberships"),
+  },
+  handler: async (ctx, args) => {
+    assertInternalIdentitySecret(args.internalSecret);
+    const now = Date.now();
+    await assertConvexRateLimit(ctx, {
+      scope: "membership.user_recovery",
+      key: args.userId,
+      limit: 20,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User session is stale");
+    }
+    const membership = await ctx.db.get(args.membershipId);
+    if (
+      !membership ||
+      membership.revokedAt !== undefined ||
+      membership.userId !== user._id
+    ) {
+      throw new Error("Membership is not recoverable for this user");
+    }
+    const availability = await ctx.db
+      .query("availabilityRecords")
+      .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
+      .first();
+    if (
+      !isMembershipRecoverable({
+        role: membership.role,
+        revokedAt: membership.revokedAt,
+        hasAvailability: Boolean(availability),
+      })
+    ) {
+      throw new Error("Membership is not recoverable for this user");
+    }
+
+    const accessToken = await createSecretToken("membership");
+    await ctx.db.insert("membershipAccessTokens", {
+      membershipId: membership._id,
+      tokenHash: accessToken.tokenHash,
+      tokenFingerprint: accessToken.tokenFingerprint,
+      tokenVersion: 1,
+      tokenCreatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await insertAuditEvent(ctx, {
+      meetingId: membership.meetingId,
+      actorMembershipId: membership._id,
+      targetMembershipId: membership._id,
+      kind: "membership.user_recovery_link_created",
+      metadata: {
+        tokenFingerprint: accessToken.tokenFingerprint,
+      },
+      now,
+    });
+
+    return {
+      membershipId: membership._id,
+      membershipToken: accessToken.rawToken,
+      tokenFingerprint: accessToken.tokenFingerprint,
+    };
+  },
+});
+
+async function completeEmailVerificationForUserId(
+  ctx: MutationLikeCtx,
+  args: {
+    magicLinkToken: string;
+    currentUserId?: Id<"users">;
+  },
+) {
+  const now = Date.now();
+  const tokenHash = await hashSecretToken(args.magicLinkToken);
+  await assertConvexRateLimit(ctx, {
+    scope: "magic_link.verify",
+    key: tokenFingerprintFromHash(tokenHash),
+    limit: 10,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    now,
+  });
+  const magicLink = await ctx.db
+    .query("magicLinks")
+    .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+    .unique();
+
+  assertMagicLinkCanBeConsumed(magicLink, now);
+  if (magicLink.purpose !== "emailVerification" || !magicLink.emailIdentityId) {
+    throw new Error("Magic link cannot verify an email identity");
+  }
+
+  const identity = await ctx.db.get(magicLink.emailIdentityId);
+  if (!identity) {
+    throw new Error("Email identity not found");
+  }
+
+  let canonicalUserId = identity.userId;
+  if (!canonicalUserId && args.currentUserId) {
+    const currentUser = await ctx.db.get(args.currentUserId);
+    if (!currentUser) {
+      throw new Error("Current user session is stale");
+    }
+    canonicalUserId = currentUser._id;
+  }
+  if (!canonicalUserId) {
+    canonicalUserId = await ctx.db.insert("users", {
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+    });
+  }
+
+  if (args.currentUserId && args.currentUserId !== canonicalUserId) {
+    await mergeUsers(ctx, {
+      sourceUserId: args.currentUserId,
+      targetUserId: canonicalUserId,
+      now,
+    });
+  }
+
+  await ctx.db.patch(magicLink._id, { consumedAt: now });
+  await ctx.db.patch(identity._id, {
+    userId: canonicalUserId,
+    verifiedAt: identity.verifiedAt ?? now,
+    updatedAt: now,
+  });
+  await ctx.db.patch(canonicalUserId, {
+    lastSeenAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    userId: canonicalUserId,
+    emailIdentityId: identity._id,
+    normalizedEmail: identity.normalizedEmail,
+    verifiedAt: identity.verifiedAt ?? now,
+  };
+}
+
+async function mergeUsers(
+  ctx: MutationLikeCtx,
+  args: {
+    sourceUserId: Id<"users">;
+    targetUserId: Id<"users">;
+    now: number;
+  },
+) {
+  if (args.sourceUserId === args.targetUserId) {
+    return;
+  }
+  const [sourceUser, targetUser] = await Promise.all([
+    ctx.db.get(args.sourceUserId),
+    ctx.db.get(args.targetUserId),
+  ]);
+  if (!sourceUser || !targetUser) {
+    throw new Error("User merge target is stale");
+  }
+
+  const sourceEmails = await ctx.db
+    .query("emailIdentities")
+    .withIndex("by_user", (q) => q.eq("userId", sourceUser._id))
+    .collect();
+  for (const email of sourceEmails) {
+    await ctx.db.patch(email._id, {
+      userId: targetUser._id,
+      updatedAt: args.now,
+    });
+  }
+
+  const targetMemberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_user", (q) => q.eq("userId", targetUser._id))
+    .collect();
+  const targetMeetingIds = new Set(
+    targetMemberships.map((membership) => membership.meetingId),
+  );
+  const sourceMemberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_user", (q) => q.eq("userId", sourceUser._id))
+    .collect();
+
+  for (const membership of sourceMemberships) {
+    await ctx.db.patch(membership._id, {
+      userId: targetMeetingIds.has(membership.meetingId) ? undefined : targetUser._id,
+      updatedAt: args.now,
+    });
+  }
+
+  await ctx.db.patch(targetUser._id, {
+    lastSeenAt: args.now,
+    updatedAt: args.now,
+  });
+  await ctx.db.delete(sourceUser._id);
+}
+
+async function listVerifiedEmailsForUser(ctx: QueryLikeCtx, userId: Id<"users">) {
+  const identities = await ctx.db
+    .query("emailIdentities")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  return identities
+    .filter((identity) => identity.verifiedAt !== undefined)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .map((identity) => ({
+      emailIdentityId: identity._id,
+      normalizedEmail: identity.normalizedEmail,
+      verifiedAt: identity.verifiedAt,
+    }));
+}
+
+async function buildDashboardMembershipRows(
+  ctx: QueryLikeCtx,
+  memberships: {
+    _id: Id<"memberships">;
+    meetingId: Id<"meetings">;
+    role: MembershipRole;
+    displayName?: string;
+    revokedAt?: number;
+    updatedAt: number;
+  }[],
+) {
+  const rows: {
+    _id: Id<"memberships">;
+    meetingId: Id<"meetings">;
+    role: MembershipRole;
+    displayName?: string;
+    revokedAt?: number;
+    updatedAt: number;
+    hasAvailability: boolean;
+    meeting: ReturnType<typeof redactPublicMeeting>;
+  }[] = [];
+  for (const membership of memberships) {
+    const meeting = await ctx.db.get(membership.meetingId);
+    if (!meeting) {
+      continue;
+    }
+    const availability = await ctx.db
+      .query("availabilityRecords")
+      .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
+      .first();
+    rows.push({
+      _id: membership._id,
+      meetingId: membership.meetingId,
+      role: membership.role,
+      displayName: membership.displayName,
+      revokedAt: membership.revokedAt,
+      updatedAt: membership.updatedAt,
+      hasAvailability: Boolean(availability),
+      meeting: redactPublicMeeting(meeting),
+    });
+  }
+  return rows;
+}
+
 async function buildResultsForMeeting(
   ctx: QueryLikeCtx,
   meeting: {
@@ -1684,6 +2059,10 @@ async function findMembershipByToken(ctx: QueryLikeCtx, membershipToken: string)
 
 async function resolveMembershipByToken(ctx: QueryLikeCtx, membershipToken: string) {
   const tokenHash = await hashSecretToken(membershipToken);
+  return await resolveMembershipByTokenHash(ctx, tokenHash);
+}
+
+async function resolveMembershipByTokenHash(ctx: QueryLikeCtx, tokenHash: string) {
   const membership = await ctx.db
     .query("memberships")
     .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
@@ -1710,6 +2089,32 @@ async function resolveMembershipByToken(ctx: QueryLikeCtx, membershipToken: stri
   }
 
   return { membership: accessMembership, accessTokenId: accessToken._id };
+}
+
+async function resolveTrustedUserId(
+  ctx: MutationLikeCtx,
+  args: {
+    internalSecret?: string;
+    userId?: Id<"users">;
+    now: number;
+  },
+) {
+  if (!args.userId) {
+    return undefined;
+  }
+  if (!args.internalSecret) {
+    throw new Error("Internal identity authorization failed");
+  }
+  assertInternalIdentitySecret(args.internalSecret);
+  const user = await ctx.db.get(args.userId);
+  if (!user) {
+    throw new Error("User session is stale");
+  }
+  await ctx.db.patch(user._id, {
+    lastSeenAt: args.now,
+    updatedAt: args.now,
+  });
+  return user._id;
 }
 
 async function requireMembershipByToken(ctx: MutationLikeCtx, membershipToken: string) {
@@ -1765,6 +2170,7 @@ async function upsertEmailIdentity(
   email: string,
   displayName: string | undefined,
   now: number,
+  userId?: Id<"users">,
 ) {
   const normalizedEmail = normalizeEmailAddress(email);
   const existingIdentity = await ctx.db
@@ -1774,6 +2180,7 @@ async function upsertEmailIdentity(
 
   if (existingIdentity) {
     await ctx.db.patch(existingIdentity._id, {
+      ...(userId && !existingIdentity.userId ? { userId } : {}),
       ...(displayName ? { displayName: displayName.trim() } : {}),
       updatedAt: now,
     });
@@ -1782,6 +2189,7 @@ async function upsertEmailIdentity(
 
   return await ctx.db.insert("emailIdentities", {
     normalizedEmail,
+    userId,
     displayName: displayName?.trim(),
     createdAt: now,
     updatedAt: now,

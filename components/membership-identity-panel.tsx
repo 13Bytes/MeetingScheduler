@@ -156,8 +156,8 @@ export function MembershipIdentityPanel({
         ) : (
           <div className="grid gap-3">
             <p className="text-sm leading-6 text-slate-600">
-              Add a verified email later if you want account-like recovery. Your private
-              membership link still works on its own.
+              This private return link adds this meeting to the current browser session.
+              Add a verified email later if you want recovery from another browser.
             </p>
             <label className="grid gap-2">
               <span className="text-sm font-medium text-foreground">Email</span>

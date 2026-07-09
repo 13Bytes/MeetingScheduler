@@ -4,32 +4,25 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { getConvexUrl, getInternalIdentitySecret } from "@/lib/identity-internal";
 import {
-  getIdentitySessionSecret,
-  identitySessionCookieName,
-  verifyEmailIdentitySession,
-} from "@/lib/identity-session";
-import {
   enforceRequestRateLimit,
   RateLimitError,
   rateLimitErrorResponse,
 } from "@/lib/rate-limit";
 import { buildAbsoluteAppUrl, routes } from "@/lib/routes";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readUserSession } from "@/lib/user-server-session";
 
 export async function POST(request: NextRequest) {
-  const session = verifyEmailIdentitySession(
-    request.cookies.get(identitySessionCookieName)?.value,
-    getIdentitySessionSecret(),
-  );
+  const session = await readUserSession(request);
   if (!session) {
-    return NextResponse.json({ error: "Verify your email first." }, { status: 401 });
+    return NextResponse.json({ error: "Open or create a meeting first." }, { status: 401 });
   }
 
   try {
     await enforceRequestRateLimit({
       request,
       scope: "identity.recover_membership",
-      key: session.emailIdentityId,
+      key: session.userId,
       limit: 20,
       windowMs: 15 * 60 * 1000,
     });
@@ -39,9 +32,9 @@ export async function POST(request: NextRequest) {
     }
 
     const convex = new ConvexHttpClient(getConvexUrl());
-    const result = await convex.mutation(api.meetings.createRecoveredMembershipLink, {
+    const result = await convex.mutation(api.meetings.createRecoveredUserMembershipLink, {
       internalSecret: getInternalIdentitySecret(),
-      emailIdentityId: session.emailIdentityId as Id<"emailIdentities">,
+      userId: session.userId,
       membershipId: body.membershipId as Id<"memberships">,
     });
     const origin = new URL(request.url).origin;

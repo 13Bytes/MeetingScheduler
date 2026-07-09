@@ -16,6 +16,14 @@ import {
 } from "./domain/validators";
 
 export default defineSchema({
+  users: defineTable({
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastSeenAt: v.optional(v.number()),
+  })
+    .index("by_updated_at", ["updatedAt"])
+    .index("by_last_seen_at", ["lastSeenAt"]),
+
   meetings: defineTable({
     title: v.string(),
     slug: v.string(),
@@ -43,6 +51,7 @@ export default defineSchema({
   memberships: defineTable({
     meetingId: v.id("meetings"),
     emailIdentityId: v.optional(v.id("emailIdentities")),
+    userId: v.optional(v.id("users")),
     displayName: v.optional(v.string()),
     role: membershipRoleValidator,
     privacyMode: privacyModeValidator,
@@ -55,6 +64,7 @@ export default defineSchema({
     .index("by_meeting", ["meetingId"])
     .index("by_meeting_role", ["meetingId", "role"])
     .index("by_email_identity", ["emailIdentityId"])
+    .index("by_user", ["userId"])
     .index("by_token_hash", ["tokenHash"])
     .index("by_updated_at", ["updatedAt"]),
 
@@ -119,11 +129,14 @@ export default defineSchema({
 
   emailIdentities: defineTable({
     normalizedEmail: v.string(),
+    userId: v.optional(v.id("users")),
     displayName: v.optional(v.string()),
     verifiedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_normalized_email", ["normalizedEmail"]),
+  })
+    .index("by_normalized_email", ["normalizedEmail"])
+    .index("by_user", ["userId"]),
 
   magicLinks: defineTable({
     purpose: magicLinkPurposeValidator,
