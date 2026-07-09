@@ -60,9 +60,12 @@ export async function POST(request: NextRequest) {
       userId: session.userId,
     });
 
-    return NextResponse.json(result, {
-      headers: response.headers,
-    });
+    const finalResponse = NextResponse.json(result);
+    const setCookieHeader = response.headers.get("Set-Cookie");
+    if (setCookieHeader) {
+      finalResponse.headers.set("Set-Cookie", setCookieHeader);
+    }
+    return finalResponse;
   } catch (caughtError) {
     if (caughtError instanceof RateLimitError) {
       return rateLimitErrorResponse(caughtError);

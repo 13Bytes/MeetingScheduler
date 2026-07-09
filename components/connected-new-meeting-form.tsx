@@ -23,13 +23,12 @@ function LiveNewMeetingForm() {
             clientRateLimitKey: getAnonymousClientRateLimitKey(),
           }),
         });
-        const body = (await response.json()) as {
-          error?: string;
-          slug?: string;
-          adminMembershipToken?: string;
-        };
-        if (!response.ok || !body.slug || !body.adminMembershipToken) {
-          throw new Error(body.error ?? "Meeting creation failed.");
+        const body = await parseCreateMeetingResponse(response);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Meeting creation failed.");
+        }
+        if (!body?.slug || !body.adminMembershipToken) {
+          throw new Error(body?.error ?? "Meeting creation failed.");
         }
         return {
           slug: body.slug,
@@ -38,4 +37,24 @@ function LiveNewMeetingForm() {
       }}
     />
   );
+}
+
+async function parseCreateMeetingResponse(response: Response): Promise<{
+  error?: string;
+  slug?: string;
+  adminMembershipToken?: string;
+} | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return null;
+  }
+  try {
+    return (await response.json()) as {
+      error?: string;
+      slug?: string;
+      adminMembershipToken?: string;
+    };
+  } catch {
+    return null;
+  }
 }

@@ -44,7 +44,7 @@ export async function ensureUserSession(
   response.headers.append(
     "Set-Cookie",
     buildUserSessionCookie(sessionToken, {
-      secure: request.nextUrl.protocol === "https:",
+      secure: shouldUseSecureCookie(request),
     }),
   );
   return {
@@ -81,4 +81,17 @@ export async function readUserSession(request: NextRequest) {
 
 export function expireUserSession(response: NextResponse): void {
   response.headers.append("Set-Cookie", buildExpiredUserSessionCookie());
+}
+
+function shouldUseSecureCookie(request: NextRequest): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return true;
+  }
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedProto) {
+    return forwardedProto
+      .split(",")
+      .some((proto) => proto.trim().toLowerCase() === "https");
+  }
+  return request.nextUrl.protocol === "https:";
 }

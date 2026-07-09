@@ -518,7 +518,11 @@ export function ParticipantAvailabilityPainter({
   }, [meeting.slug, membershipToken, onMembershipTokenAvailable]);
 
   useEffect(() => {
-    if (!membershipToken || importedMembershipTokenRef.current === membershipToken) {
+    if (
+      !membershipToken ||
+      membershipToken !== createdMembershipToken ||
+      importedMembershipTokenRef.current === membershipToken
+    ) {
       return;
     }
     importedMembershipTokenRef.current = membershipToken;
@@ -529,7 +533,7 @@ export function ParticipantAvailabilityPainter({
     }).catch(() => {
       importedMembershipTokenRef.current = null;
     });
-  }, [membershipToken]);
+  }, [createdMembershipToken, membershipToken]);
 
   async function handleSave() {
     setError(null);

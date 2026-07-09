@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   } catch (caughtError) {
     return NextResponse.json(
       { error: safeErrorMessage(caughtError, "Unable to create user session.") },
-      { status: 400 },
+      { status: 503 },
     );
   }
 }

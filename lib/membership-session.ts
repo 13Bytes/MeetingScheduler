@@ -41,7 +41,10 @@ export function readRememberedMembershipTokens(): string[] {
     }
     const value = cookie.slice(cookie.indexOf("=") + 1).trim();
     if (value) {
-      tokens.add(decodeURIComponent(value));
+      const decodedValue = safeDecodeURIComponent(value);
+      if (decodedValue) {
+        tokens.add(decodedValue);
+      }
     }
   }
 
@@ -95,4 +98,12 @@ function readCookie(name: string): string | null {
   }
 
   return decodeURIComponent(cookie.slice(name.length + 1));
+}
+
+function safeDecodeURIComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
