@@ -10,8 +10,24 @@ import {
   verifyEmailIdentitySession,
 } from "@/lib/identity-session";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readUserSession } from "@/lib/user-server-session";
 
 export async function GET(request: NextRequest) {
+  try {
+    const userSession = await readUserSession(request);
+    const primaryVerifiedEmail = userSession?.verifiedEmails[0];
+    if (userSession && primaryVerifiedEmail) {
+      return NextResponse.json({
+        signedIn: true,
+        emailIdentityId: primaryVerifiedEmail.emailIdentityId,
+        normalizedEmail: primaryVerifiedEmail.normalizedEmail,
+        expiresAt: userSession.expiresAt,
+      });
+    }
+  } catch {
+    // Fall back to the legacy email session path below.
+  }
+
   const session = verifyEmailIdentitySession(
     request.cookies.get(identitySessionCookieName)?.value,
     getIdentitySessionSecret(),

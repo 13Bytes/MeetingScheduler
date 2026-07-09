@@ -18,6 +18,36 @@ export function readRememberedMembershipToken(meetingSlug: string): string | nul
   return readCookie(buildCookieName(meetingSlug));
 }
 
+export function readRememberedMembershipTokens(): string[] {
+  const tokens = new Set<string>();
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(storagePrefix)) {
+        continue;
+      }
+      const token = window.localStorage.getItem(key)?.trim();
+      if (token) {
+        tokens.add(token);
+      }
+    }
+  } catch {
+    // Continue with cookie-backed tokens below.
+  }
+
+  for (const cookie of document.cookie.split("; ")) {
+    if (!cookie.startsWith(cookiePrefix)) {
+      continue;
+    }
+    const value = cookie.slice(cookie.indexOf("=") + 1).trim();
+    if (value) {
+      tokens.add(decodeURIComponent(value));
+    }
+  }
+
+  return Array.from(tokens);
+}
+
 export function rememberMembershipToken(meetingSlug: string, membershipToken: string) {
   const trimmedToken = membershipToken.trim();
   if (!trimmedToken) {

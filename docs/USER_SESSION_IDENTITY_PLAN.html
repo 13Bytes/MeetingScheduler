@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>User Session and Identity Refactor Plan</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --surface-muted: #f1f5f9;
+        --border: #cbd5e1;
+        --text: #0f172a;
+        --muted: #475569;
+        --primary: #0f766e;
+        --primary-soft: #ccfbf1;
+        --warning: #92400e;
+        --warning-soft: #fef3c7;
+        --code: #1e293b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        line-height: 1.55;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 40px 0 64px;
+      }
+
+      header {
+        margin-bottom: 28px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2rem, 4vw, 3.25rem);
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 1.4rem;
+      }
+
+      h3 {
+        margin: 24px 0 8px;
+        font-size: 1.05rem;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      ul,
+      ol {
+        margin: 10px 0 0;
+        padding-left: 24px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code {
+        border-radius: 5px;
+        background: var(--surface-muted);
+        color: var(--code);
+        padding: 1px 5px;
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 0.92em;
+      }
+
+      .lede {
+        max-width: 860px;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .section {
+        margin-top: 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 22px;
+      }
+
+      .callout {
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--primary);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 16px;
+      }
+
+      .warning {
+        border-color: #f59e0b;
+        border-left-color: #d97706;
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        padding: 4px 10px;
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .step {
+        border-top: 1px solid var(--border);
+        padding-top: 18px;
+        margin-top: 18px;
+      }
+
+      .step:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+        margin-top: 0;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 760px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--surface-muted);
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100% - 24px, 1120px);
+          padding-top: 24px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .section {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="pill">Implementation plan</span>
+        <h1>User Session and Identity Refactor</h1>
+        <p class="lede">
+          This plan adapts the app from email-only recovery toward a canonical
+          server-side user model. Every user gets a durable anonymous
+          <code>userId</code>, local membership tokens remain useful, and verified
+          email addresses can later recover the same user and all attached meetings.
+        </p>
+      </header>
+
+      <section class="section">
+        <h2>Shared Decisions</h2>
+        <div class="grid">
+          <div class="callout">
+            <h3>Canonical User</h3>
+            <p>
+              Add a Convex <code>users</code> table. The browser represents the
+              current user with a signed HttpOnly cookie, likely
+              <code>ms_user_session</code>.
+            </p>
+          </div>
+          <div class="callout">
+            <h3>Email Ownership</h3>
+            <p>
+              Each normalized email belongs to exactly one canonical user. One user
+              may own multiple email addresses.
+            </p>
+          </div>
+          <div class="callout">
+            <h3>User Merge</h3>
+            <p>
+              If a current anonymous user verifies an email already owned by another
+              user, migrate memberships and emails to the existing canonical user,
+              set the browser session to that user, then delete the old user row.
+            </p>
+            <p>
+              If both users have a membership for the same meeting, keep the voting
+              set linked to the user being merged in. Move that user's email to the
+              canonical user, and move only the non-colliding memberships.
+            </p>
+          </div>
+          <div class="callout">
+            <h3>Private Links</h3>
+            <p>
+              Opening a private return link imports only that specific membership
+              into the current user. It does not import unrelated meetings.
+            </p>
+          </div>
+          <div class="callout">
+            <h3>Session Lifetime</h3>
+            <p>
+              User sessions last 90 days and are refreshed on relevant interactions.
+              Reuse <code>MEETING_SCHEDULER_IDENTITY_SESSION_SECRET</code> for signing.
+            </p>
+          </div>
+          <div class="callout">
+            <h3>Email Session</h3>
+            <p>
+              <code>ms_email_session</code> becomes derived from the canonical user
+              and its verified <code>emailIdentities</code>. User identity becomes
+              the source of truth.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Target Behavior</h2>
+        <ul>
+          <li>
+            A new anonymous user gets a server-side <code>userId</code> when the
+            app reaches an identity-relevant interaction.
+          </li>
+          <li>
+            Creating a meeting attaches the creator's admin membership to the
+            current <code>userId</code>.
+          </li>
+          <li>
+            Joining or saving availability attaches that membership to the current
+            <code>userId</code>.
+          </li>
+          <li>
+            Locally remembered membership tokens are still stored per meeting, as
+            they are today, but All Meetings imports them by verifying the tokens
+            server-side.
+          </li>
+          <li>
+            Adding an email to the same session links every membership owned by the
+            current <code>userId</code> to the verified email's canonical user.
+          </li>
+          <li>
+            Later verification of that email from another browser restores the same
+            canonical <code>userId</code> and therefore the same All Meetings list.
+          </li>
+          <li>
+            Local membership import runs on All Meetings and on private return-link
+            opens.
+          </li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Data Model Changes</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Table</th>
+                <th>Change</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>users</code></td>
+                <td>
+                  Add table with fields like <code>createdAt</code>,
+                  <code>updatedAt</code>, optional <code>lastSeenAt</code>.
+                </td>
+                <td>Canonical anonymous-or-verified app user.</td>
+              </tr>
+              <tr>
+                <td><code>memberships</code></td>
+                <td>
+                  Add optional <code>userId: v.id("users")</code> and index
+                  <code>by_user</code>.
+                </td>
+                <td>
+                  All Meetings can query memberships connected to the current user.
+                </td>
+              </tr>
+              <tr>
+                <td><code>emailIdentities</code></td>
+                <td>
+                  Add optional <code>userId: v.id("users")</code> and index
+                  <code>by_user</code>. Keep <code>by_normalized_email</code>.
+                </td>
+                <td>
+                  Email verification resolves to a canonical user; multiple emails
+                  can belong to one user.
+                </td>
+              </tr>
+              <tr>
+                <td><code>auditEvents</code></td>
+                <td>
+                  Optionally include user merge and membership import audit events.
+                  Existing schema can store these as metadata on meeting-level events
+                  where a meeting is involved.
+                </td>
+                <td>Debuggability and future support visibility.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warning" style="margin-top: 16px">
+          <p>
+            This project will reset the Convex database for this refactor instead of
+            running compatibility migrations. The implementation can update the schema
+            directly to the target shape, then reset development data before testing.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Implementation Order</h2>
+
+        <div class="step">
+          <h3>1. Add User Session Primitives</h3>
+          <p>
+            Create a server-side utility similar to <code>lib/identity-session.ts</code>
+            for a signed <code>ms_user_session</code> cookie.
+          </p>
+          <ul>
+            <li>Payload should contain <code>userId</code>, <code>issuedAt</code>, and <code>expiresAt</code>.</li>
+            <li>Use <code>MEETING_SCHEDULER_IDENTITY_SESSION_SECRET</code> as the signing secret.</li>
+            <li>Set the max age to 90 days.</li>
+            <li>Refresh the cookie on relevant interactions that ensure or use the user session.</li>
+            <li>Use the same secure-cookie behavior as the current email session cookie.</li>
+            <li>Provide helpers to create, verify, set, and expire the cookie.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>2. Add Convex User Functions</h3>
+          <p>
+            Add functions that let trusted Next.js routes ensure and resolve the
+            current user.
+          </p>
+          <ul>
+            <li><code>ensureUser</code>: create a <code>users</code> row if no valid user exists.</li>
+            <li><code>readUserSession</code>: verify that a session user still exists.</li>
+            <li>
+              <code>mergeUsers</code>: migrate source emails and non-colliding
+              memberships into target user, preserve source-user voting sets for
+              same-meeting collisions, then delete the source user.
+            </li>
+          </ul>
+          <p class="meta">
+            These should be protected with the existing internal secret pattern used
+            by identity routes.
+          </p>
+        </div>
+
+        <div class="step">
+          <h3>3. Introduce Next.js User Session Route</h3>
+          <p>
+            Add a route like <code>/api/user/session</code> that ensures a user
+            session when identity-relevant UI needs one.
+          </p>
+          <ul>
+            <li>If <code>ms_user_session</code> is valid, return it.</li>
+            <li>If missing or stale, create a Convex user and set the cookie.</li>
+            <li>Do not create users for homepage-only or static browsing.</li>
+            <li>Refresh the 90-day user session cookie whenever this route confirms or creates a user.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>4. Attach New Meetings to Current User</h3>
+          <p>
+            Update meeting creation so the admin membership receives the current
+            <code>userId</code>.
+          </p>
+          <ul>
+            <li>
+              Preferred path: route meeting creation through a Next.js API route that
+              can read or create <code>ms_user_session</code>.
+            </li>
+            <li>
+              The route calls a Convex mutation with an internal secret and the
+              resolved <code>userId</code>.
+            </li>
+            <li>
+              Keep the existing client redirect to the private admin membership link.
+            </li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>5. Import Local Membership Tokens</h3>
+          <p>
+            Add a client component on All Meetings that reads locally remembered
+            membership tokens and sends them to a server route for import.
+          </p>
+          <ul>
+            <li>Create <code>/api/user/import-memberships</code>.</li>
+            <li>The browser sends raw membership tokens already stored locally.</li>
+            <li>The server ensures the current user session.</li>
+            <li>Convex resolves each token using the existing hashed-token lookup.</li>
+            <li>Valid, active memberships get patched with <code>userId</code>.</li>
+            <li>Invalid or revoked tokens are ignored or returned as non-fatal import failures.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>6. Make Private Return Links Import One Membership</h3>
+          <p>
+            When the user opens <code>/join/[membershipToken]</code>, ensure a user
+            session and attach only that resolved membership to the current user.
+          </p>
+          <ul>
+            <li>Keep storing the token locally for per-meeting return behavior.</li>
+            <li>Do not import any other local tokens from this page.</li>
+            <li>Preserve existing authorization rules: the token remains the authority for editing that membership.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>7. Rework Email Verification Around Users</h3>
+          <p>
+            Update email verification so verified emails resolve to canonical users.
+          </p>
+          <ul>
+            <li>Email request creates or finds <code>emailIdentities</code> by normalized email.</li>
+            <li>Magic-link verification ensures a current user session if needed.</li>
+            <li>If the email has no <code>userId</code>, assign it to the current user.</li>
+            <li>If the email already has the same <code>userId</code>, just refresh session state.</li>
+            <li>
+              If the email has a different <code>userId</code>, merge the current
+              user into the email's canonical user using the collision rule above.
+            </li>
+            <li>
+              After verification, set the user session cookie to the canonical user.
+              Any email-session display state should be derived from that user and
+              verified email identities.
+            </li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>8. Update All Meetings Query</h3>
+          <p>
+            Change All Meetings from querying by <code>emailIdentityId</code> to
+            querying by <code>userId</code>.
+          </p>
+          <ul>
+            <li>Use <code>memberships.by_user</code> as the primary index.</li>
+            <li>Continue showing role, saved response status, lifecycle state, and public poll link.</li>
+            <li>Keep recovery-link actions where they still make product sense.</li>
+            <li>Show verified emails attached to the user as account context, not as the membership source of truth.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>9. Update UI Copy and States</h3>
+          <p>
+            Make the product language match the new model.
+          </p>
+          <ul>
+            <li>All Meetings should explain that meetings are tied to this browser session and recoverable after email verification.</li>
+            <li>The Email Recovery box should say that adding email links the current session's meetings.</li>
+            <li>The private membership page should say the return link adds this meeting to the current session.</li>
+            <li>Empty state should mention creating, joining, or opening a private return link.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>10. Reset Database and Regenerate Convex Types</h3>
+          <p>
+            This refactor intentionally avoids migration compatibility work. Reset
+            the development Convex database after landing the schema change, then
+            regenerate Convex generated files and test with fresh data.
+          </p>
+          <ul>
+            <li>Remove migration/backfill code from scope.</li>
+            <li>Document the reset command used for the active Convex deployment before running it.</li>
+            <li>Recreate test meetings through the app after reset.</li>
+            <li>Confirm old anonymous rows are not expected to survive the refactor.</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>11. Tests</h3>
+          <p>Add focused tests before broad refactors become hard to reason about.</p>
+          <ul>
+            <li>Unit tests for user session cookie signing, verification, expiry, and tamper rejection.</li>
+            <li>Convex tests for user creation, membership import, email assignment, and merge behavior.</li>
+            <li>Route tests for email verification adopting the canonical user.</li>
+            <li>Component tests for All Meetings importing local tokens and rendering imported meetings.</li>
+            <li>Regression tests for private return links importing only one membership.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Resolved Implementation Details</h2>
+        <ul>
+          <li>
+            <code>ms_email_session</code> becomes derived from <code>users</code>
+            and <code>emailIdentities</code>; <code>ms_user_session</code> is the
+            durable session source of truth.
+          </li>
+          <li>
+            For duplicate same-meeting memberships during merge, keep the voting set
+            linked to the user being merged in. Move the linked email to the canonical
+            user along with all memberships that do not collide.
+          </li>
+          <li>
+            User sessions last 90 days and are refreshed on relevant interactions.
+          </li>
+          <li>
+            Local import runs on All Meetings and on return-link opens.
+          </li>
+          <li>
+            No Convex migration/backfill is needed because the database will be reset
+            for this refactor.
+          </li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Risks and Guardrails</h2>
+        <ul>
+          <li>
+            Do not authorize access from <code>userId</code> alone until membership
+            ownership rules are explicit. Existing membership tokens should remain the
+            authority for editing a membership.
+          </li>
+          <li>
+            Do not trust client-submitted meeting IDs during import. Accept membership
+            tokens, resolve them server-side, then attach resolved memberships.
+          </li>
+          <li>
+            Keep import bounded. If many local tokens exist, process a small batch and
+            report partial failures.
+          </li>
+          <li>
+            Merge users transactionally where possible. If merge could touch many
+            memberships later, plan batching with Convex scheduler.
+          </li>
+          <li>
+            During merge collisions, avoid overwriting an existing membership's
+            availability records by accident. The source user's same-meeting voting
+            set wins for that collision, while non-colliding memberships move normally.
+          </li>
+          <li>
+            Use indexes for all new list queries, especially <code>memberships.by_user</code>
+            and <code>emailIdentities.by_user</code>.
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

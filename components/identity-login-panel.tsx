@@ -63,8 +63,8 @@ export function IdentityLoginPanel() {
       <CardContent>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <p className="text-sm leading-6 text-slate-600">
-            Verify an email to recover meetings and response links later. Meeting creation
-            and joining still work without this.
+            Verify an email to link this browser session&apos;s meetings and recover them
+            later. Meeting creation and joining still work without this.
           </p>
           <label className="grid gap-2">
             <span className="text-sm font-medium text-foreground">Email</span>
