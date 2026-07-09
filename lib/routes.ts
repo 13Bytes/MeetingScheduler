@@ -4,6 +4,10 @@ export const routes = {
   identity: "/identity",
   identityDashboard: "/identity/dashboard",
   meetingPoll: (meetingSlug: string) => `/m/${encodeURIComponent(meetingSlug)}`,
+  adminInvite: (meetingSlug: string, adminInviteToken: string) => {
+    const params = new URLSearchParams({ adminInviteToken });
+    return `/m/${encodeURIComponent(meetingSlug)}#${params.toString()}`;
+  },
   membershipLink: (membershipToken: string) =>
     `/join/${encodeURIComponent(membershipToken)}`,
 } as const;

@@ -53,7 +53,7 @@ export default async function IdentityDashboardPage({
   if (!session) {
     return (
       <AppShell>
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_420px] lg:items-start">
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,420px)] lg:items-start">
           <div className="space-y-4">
             <h1 className="text-3xl font-semibold tracking-normal text-foreground">
               Recovery dashboard
@@ -126,9 +126,9 @@ export default async function IdentityDashboardPage({
           {dashboard.memberships.map((membership) => (
             <Card key={membership.membershipId}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-start gap-2">
                   <CalendarDays className="size-5 text-primary" aria-hidden="true" />
-                  {membership.meeting.title}
+                  <span className="min-w-0 break-words">{membership.meeting.title}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">

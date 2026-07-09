@@ -29,6 +29,13 @@ describe("secret token handling", () => {
     expect(firstToken.tokenFingerprint).not.toBe(secondToken.tokenFingerprint);
   });
 
+  it("creates separate admin invite tokens", async () => {
+    const token = await createSecretToken("adminInvite");
+
+    expect(token.rawToken).toMatch(/^ms_admin_invite_[A-Za-z0-9_-]+$/u);
+    expect(token.tokenHash).not.toContain(token.rawToken);
+  });
+
   it("rejects blank tokens before hashing", async () => {
     await expect(hashSecretToken("   ")).rejects.toThrow(/Secret token cannot be blank/u);
   });

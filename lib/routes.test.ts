@@ -14,6 +14,9 @@ describe("routes", () => {
   it("encodes dynamic route segments", () => {
     expect(routes.meetingPoll("team planning/Q3")).toBe("/m/team%20planning%2FQ3");
     expect(routes.membershipLink("member secret/1")).toBe("/join/member%20secret%2F1");
+    expect(routes.adminInvite("team planning/Q3", "admin invite/1")).toBe(
+      "/m/team%20planning%2FQ3#adminInviteToken=admin+invite%2F1",
+    );
   });
 
   it("builds absolute public and admin membership links", () => {

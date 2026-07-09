@@ -221,7 +221,7 @@ export function AdminCalendarPainter({
       <section className="grid gap-3">
         <Badge variant="accent">Admin setup</Badge>
         <div className="grid gap-2">
-          <h1 className="text-3xl font-semibold tracking-normal text-foreground">
+          <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
             {meeting.title}
           </h1>
           <p className="max-w-4xl text-sm leading-6 text-slate-600">
@@ -249,7 +249,7 @@ export function AdminCalendarPainter({
         {`${paintedCellCount} allowed cells selected.`}
       </p>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
         <Card className="overflow-hidden">
           <CardHeader className="border-b border-border">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -417,7 +417,7 @@ function CalendarPaintGrid({
   const columnTemplate = `76px repeat(${grid.days.length}, minmax(64px, 1fr))`;
   return (
     <div
-      className="max-h-[72vh] touch-pan-x touch-pan-y overflow-auto"
+      className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
       onPointerLeave={() => {
         if (!disabled) {
           onCancel();
@@ -425,7 +425,7 @@ function CalendarPaintGrid({
       }}
     >
       <div
-        className="grid min-w-[860px]"
+        className="grid min-w-[720px] sm:min-w-[860px]"
         style={{ gridTemplateColumns: columnTemplate }}
         role="grid"
         aria-label="Admin allowed time calendar"
@@ -490,7 +490,7 @@ function CalendarRow({
 }) {
   return (
     <>
-      <div className="sticky left-0 z-10 min-h-7 border-b border-r border-border bg-surface-muted px-3 py-1 text-xs font-medium text-slate-500">
+      <div className="sticky left-0 z-10 min-h-9 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-500 sm:min-h-7 sm:py-1">
         {timeKey}
       </div>
       {grid.days.map((day) => {
@@ -499,7 +499,7 @@ function CalendarRow({
           return (
             <div
               key={`${day.dateKey}_${timeKey}`}
-              className="min-h-7 border-b border-r border-border bg-slate-100"
+              className="min-h-9 border-b border-r border-border bg-slate-100 sm:min-h-7"
               aria-hidden="true"
             />
           );
@@ -564,7 +564,7 @@ function CalendarCellButton({
       }`}
       title={`${cell.dayLabel} ${cell.timeLabel}`}
       className={cn(
-        "min-h-7 touch-manipulation select-none border-b border-r border-border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed",
+        "min-h-9 touch-manipulation select-none border-b border-r border-border outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed sm:min-h-7",
         isAllowed ? "bg-teal-500 hover:bg-teal-600" : "bg-surface hover:bg-blue-50",
         cell.isWeekend && !isAllowed && "bg-slate-50",
         isPreview && previewClass,
@@ -657,7 +657,7 @@ function BrushControls({
   ];
 
   return (
-    <div className="inline-flex rounded-md border border-border bg-surface p-1">
+    <div className="flex w-full flex-wrap rounded-md border border-border bg-surface p-1 sm:w-auto">
       {controls.map((control) => {
         const Icon = control.icon;
         return (
@@ -668,7 +668,7 @@ function BrushControls({
             aria-pressed={mode === control.mode}
             title={control.label}
             className={cn(
-              "inline-flex h-9 min-w-24 items-center justify-center gap-2 rounded px-3 text-sm font-medium text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex h-9 min-w-[calc(50%-0.125rem)] flex-1 items-center justify-center gap-2 rounded px-3 text-sm font-medium text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-24 sm:flex-none",
               mode === control.mode && "bg-primary text-primary-foreground",
               mode !== control.mode && "hover:bg-surface-muted hover:text-foreground",
             )}

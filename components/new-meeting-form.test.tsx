@@ -7,13 +7,19 @@ describe("NewMeetingForm", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates a meeting and shows personal admin plus public links", async () => {
+  it("creates a meeting and redirects to the personal admin link", async () => {
     const createMeeting = vi.fn().mockResolvedValue({
       slug: "team-planning",
       adminMembershipToken: "admin-secret",
     });
+    const onCreatedRedirect = vi.fn();
 
-    render(<NewMeetingForm createMeeting={createMeeting} />);
+    render(
+      <NewMeetingForm
+        createMeeting={createMeeting}
+        onCreatedRedirect={onCreatedRedirect}
+      />,
+    );
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Team planning" },
@@ -35,12 +41,11 @@ describe("NewMeetingForm", () => {
       }),
     );
 
-    expect(
-      await screen.findByDisplayValue("http://localhost:3000/join/admin-secret"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByDisplayValue("http://localhost:3000/m/team-planning"),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(onCreatedRedirect).toHaveBeenCalledWith(
+        "http://localhost:3000/join/admin-secret",
+      ),
+    );
   });
 
   it("submits a trimmed optional recovery email", async () => {
@@ -49,7 +54,7 @@ describe("NewMeetingForm", () => {
       adminMembershipToken: "admin-secret",
     });
 
-    render(<NewMeetingForm createMeeting={createMeeting} />);
+    render(<NewMeetingForm createMeeting={createMeeting} assignLocation={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Team planning" },
@@ -64,6 +69,25 @@ describe("NewMeetingForm", () => {
       expect.objectContaining({
         creatorEmail: "Ada@Example.COM",
       }),
+    );
+  });
+
+  it("uses window.location.assign when no redirect callback is provided", async () => {
+    const createMeeting = vi.fn().mockResolvedValue({
+      slug: "team-planning",
+      adminMembershipToken: "admin-secret",
+    });
+    const assign = vi.fn();
+
+    render(<NewMeetingForm createMeeting={createMeeting} assignLocation={assign} />);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Team planning" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
+
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith("http://localhost:3000/join/admin-secret"),
     );
   });
 

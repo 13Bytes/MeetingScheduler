@@ -140,10 +140,12 @@ export const openApiDocument = {
         properties: {
           detailsVisible: { type: "boolean" },
           totalParticipantCount: { type: "number" },
+          votedParticipantCount: { type: "number" },
           availabilityCount: { type: "number" },
           candidateCount: { type: "number" },
           candidates: { type: "array", items: { type: "object" } },
           shortlist: { type: "array", items: { type: "object" } },
+          votedParticipants: { type: "array", items: { type: "object" } },
         },
       },
       ParticipantCreateRequest: {

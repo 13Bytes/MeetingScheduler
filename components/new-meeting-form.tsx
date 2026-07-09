@@ -3,20 +3,15 @@
 import {
   AlertTriangle,
   CalendarClock,
-  Check,
-  Clipboard,
-  ExternalLink,
   Loader2,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import type { AllowedTimeRangeDraft, AllowedTimePresetId } from "@/lib/meeting-presets";
 import { buildAllowedTimeRanges } from "@/lib/meeting-presets";
 import { buildCreatedMeetingLinks } from "@/lib/routes";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -45,8 +40,12 @@ type CreateMeetingResult = {
 
 export function NewMeetingForm({
   createMeeting,
+  onCreatedRedirect,
+  assignLocation = (url) => window.location.assign(url),
 }: {
   createMeeting?: (args: CreateMeetingArgs) => Promise<CreateMeetingResult>;
+  onCreatedRedirect?: (adminMembershipUrl: string) => void;
+  assignLocation?: (adminMembershipUrl: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -66,12 +65,6 @@ export function NewMeetingForm({
   const [customIncludeWeekends, setCustomIncludeWeekends] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [copiedLink, setCopiedLink] = useState<"admin" | "public" | null>(null);
-  const [createdMeeting, setCreatedMeeting] = useState<{
-    publicParticipantUrl: string;
-    adminMembershipUrl: string;
-    rangeCount: number;
-  } | null>(null);
 
   const timeZoneOptions = useMemo(() => buildTimeZoneOptions(timeZone), [timeZone]);
   const previewRanges = useMemo(() => {
@@ -101,7 +94,6 @@ export function NewMeetingForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setCopiedLink(null);
 
     if (!createMeeting) {
       setError("Convex is not configured for this environment yet.");
@@ -164,35 +156,27 @@ export function NewMeetingForm({
         meetingSlug: result.slug,
         adminMembershipToken: result.adminMembershipToken,
       });
-      setCreatedMeeting({ ...links, rangeCount: allowedTimeRanges.length });
+      if (onCreatedRedirect) {
+        onCreatedRedirect(links.adminMembershipUrl);
+      } else {
+        assignLocation(links.adminMembershipUrl);
+      }
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
           : "Meeting creation failed. Please try again.",
       );
-    } finally {
       setIsSubmitting(false);
     }
   }
 
-  async function copyLink(kind: "admin" | "public", value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedLink(kind);
-      setError(null);
-    } catch {
-      setError("Clipboard access is unavailable. Select the link text to copy it.");
-    }
-  }
-
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
       <form className="space-y-6" onSubmit={handleSubmit}>
         <section className="space-y-3">
-          <Badge variant="accent">Stage 2 creation</Badge>
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-normal text-foreground">
+            <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
               Create a meeting
             </h1>
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
@@ -315,7 +299,7 @@ export function NewMeetingForm({
             <label className="flex items-start gap-3 rounded-md border border-border bg-surface-muted p-4">
               <input
                 type="checkbox"
-                className="mt-1 size-4"
+                className="mt-1 size-4 shrink-0 accent-primary"
                 checked={everyoneAdmin}
                 onChange={(event) => setEveryoneAdmin(event.target.checked)}
               />
@@ -349,7 +333,7 @@ export function NewMeetingForm({
                 <label
                   key={option.id}
                   className={cn(
-                    "grid min-h-28 cursor-pointer gap-2 rounded-md border p-4 text-sm transition-colors",
+                    "grid cursor-pointer gap-2 rounded-md border p-4 text-sm transition-colors md:min-h-28",
                     presetId === option.id
                       ? "border-primary bg-blue-50"
                       : "border-border bg-surface hover:bg-surface-muted",
@@ -359,6 +343,7 @@ export function NewMeetingForm({
                     <input
                       type="radio"
                       name="allowed-time-preset"
+                      className="mt-0.5 size-4 shrink-0 accent-primary"
                       value={option.id}
                       checked={presetId === option.id}
                       onChange={() => setPresetId(option.id)}
@@ -411,7 +396,7 @@ export function NewMeetingForm({
                 <label className="flex items-center gap-3 md:col-span-2">
                   <input
                     type="checkbox"
-                    className="size-4"
+                    className="size-4 shrink-0 accent-primary"
                     checked={customIncludeWeekends}
                     onChange={(event) => setCustomIncludeWeekends(event.target.checked)}
                   />
@@ -443,7 +428,11 @@ export function NewMeetingForm({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={isSubmitting || !createMeeting}>
+          <Button
+            type="submit"
+            className="w-full sm:w-auto"
+            disabled={isSubmitting || !createMeeting}
+          >
             {isSubmitting ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
@@ -462,77 +451,16 @@ export function NewMeetingForm({
       <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>Created Links</CardTitle>
+            <CardTitle>After Creation</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {createdMeeting ? (
-              <>
-                <LinkBox
-                  label="Your admin membership link"
-                  value={createdMeeting.adminMembershipUrl}
-                  copied={copiedLink === "admin"}
-                  onCopy={() => copyLink("admin", createdMeeting.adminMembershipUrl)}
-                />
-                <LinkBox
-                  label="Public participant link"
-                  value={createdMeeting.publicParticipantUrl}
-                  copied={copiedLink === "public"}
-                  onCopy={() => copyLink("public", createdMeeting.publicParticipantUrl)}
-                />
-                <p className="text-sm leading-6 text-slate-600">
-                  Keep the admin membership link private. It is the creator membership
-                  with admin role, not a separate admin token.
-                </p>
-                <Button asChild variant="secondary" className="w-full">
-                  <Link href={createdMeeting.publicParticipantUrl}>
-                    <ExternalLink className="size-4" aria-hidden="true" />
-                    Open participant link
-                  </Link>
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm leading-6 text-slate-600">
-                After creation, this panel will show the personal admin membership link
-                and the public participant link.
-              </p>
-            )}
+          <CardContent>
+            <p className="text-sm leading-6 text-slate-600">
+              You will be redirected to your private admin membership link. The meeting
+              page will show invitation links and your private return link.
+            </p>
           </CardContent>
         </Card>
       </aside>
-    </div>
-  );
-}
-
-function LinkBox({
-  label,
-  value,
-  copied,
-  onCopy,
-}: {
-  label: string;
-  value: string;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div className="grid gap-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      <div className="flex gap-2">
-        <input className={inputClassName} readOnly value={value} aria-label={label} />
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          aria-label={`Copy ${label}`}
-          onClick={onCopy}
-        >
-          {copied ? (
-            <Check className="size-4 text-accent" aria-hidden="true" />
-          ) : (
-            <Clipboard className="size-4" aria-hidden="true" />
-          )}
-        </Button>
-      </div>
     </div>
   );
 }

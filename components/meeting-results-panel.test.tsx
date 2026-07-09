@@ -40,11 +40,16 @@ const detailedResults: MeetingResults = {
   granularityMinutes: 30,
   durationMinutes: 60,
   totalParticipantCount: 2,
+  votedParticipantCount: 2,
   availabilityCount: 4,
   candidateCount: 1,
   detailsVisible: true,
   candidates: [candidateFixture],
   shortlist: [candidateFixture],
+  votedParticipants: [
+    { membershipId: "alice", displayName: "Alice" },
+    { membershipId: "bruno", displayName: "Bruno" },
+  ],
 };
 
 describe("MeetingResultsPanel", () => {
@@ -54,13 +59,76 @@ describe("MeetingResultsPanel", () => {
     expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
     expect(screen.getByText(/admin view/i)).toBeInTheDocument();
     expect(screen.getByText(/2 of 2 can attend/i)).toBeInTheDocument();
-    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText(/2 of 2 participants have voted/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Bruno/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Bruno \(1 reluctant\)/i)).toBeInTheDocument();
   });
 
+  it("hides zero-attendee slots from recommendations and the heatmap", () => {
+    const unavailableCandidate: ScoredCandidateSlot = {
+      ...candidateFixture,
+      startUtc: "2026-06-25T08:00:00.000Z",
+      endUtc: "2026-06-25T09:00:00.000Z",
+      availableParticipantCount: 0,
+      unavailableParticipantCount: 2,
+      reluctantVoteCount: 0,
+      yesVoteCount: 0,
+      scorePercent: 0,
+      rank: 2,
+      participantDetails: [],
+    };
+
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidateCount: 2,
+          candidates: [candidateFixture, unavailableCandidate],
+          shortlist: [candidateFixture, unavailableCandidate],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 2 can attend/i)).toBeInTheDocument();
+    expect(screen.queryByText(/0 of 2 can attend/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("0/2")).not.toBeInTheDocument();
+  });
+
+  it("shows an empty shortlist state when all candidates have zero attendees", () => {
+    const unavailableCandidate: ScoredCandidateSlot = {
+      ...candidateFixture,
+      availableParticipantCount: 0,
+      unavailableParticipantCount: 2,
+      reluctantVoteCount: 0,
+      yesVoteCount: 0,
+      scorePercent: 0,
+      participantDetails: [],
+    };
+
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidates: [unavailableCandidate],
+          shortlist: [unavailableCandidate],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/no candidate slots have any attendees yet/i).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/0 of 2 can attend/i)).not.toBeInTheDocument();
+  });
+
   it("does not render individual names for summary-only payloads", () => {
+    const summaryOnlyDetailedResults = { ...detailedResults };
+    delete summaryOnlyDetailedResults.votedParticipants;
     const summaryResults: MeetingResults = {
-      ...detailedResults,
+      ...summaryOnlyDetailedResults,
       detailsVisible: false,
       candidates: detailedResults.candidates.map((candidate) => {
         const summary = { ...candidate };
@@ -78,6 +146,8 @@ describe("MeetingResultsPanel", () => {
 
     expect(screen.getByText(/summary only/i)).toBeInTheDocument();
     expect(screen.getByText(/2 of 2 can attend/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 2 participants have voted/i)).toBeInTheDocument();
+    expect(screen.getByText(/names are hidden/i)).toBeInTheDocument();
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
     expect(screen.queryByText(/Bruno/i)).not.toBeInTheDocument();
   });

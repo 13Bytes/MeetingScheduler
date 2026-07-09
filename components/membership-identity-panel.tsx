@@ -124,7 +124,7 @@ export function MembershipIdentityPanel({
           <>
             <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
               <span className="text-slate-500">Verified email </span>
-              <span className="font-medium text-foreground">
+              <span className="break-all font-medium text-foreground">
                 {session.normalizedEmail}
               </span>
             </div>
@@ -137,6 +137,7 @@ export function MembershipIdentityPanel({
               <Button
                 type="button"
                 variant="secondary"
+                className="w-full"
                 disabled={!membershipToken || isBusy}
                 onClick={attachMembership}
               >
@@ -171,6 +172,7 @@ export function MembershipIdentityPanel({
             <Button
               type="button"
               variant="secondary"
+              className="w-full"
               disabled={!email || isBusy}
               onClick={requestVerification}
             >
@@ -180,10 +182,7 @@ export function MembershipIdentityPanel({
                 <Mail className="size-4" aria-hidden="true" />
               )}
               Send verification link
-            </Button>
-            <Button asChild variant="ghost" className="w-full">
-              <Link href="/identity">Email recovery page</Link>
-            </Button>
+              </Button>
           </div>
         )}
         {status ? (
@@ -193,7 +192,10 @@ export function MembershipIdentityPanel({
           >
             {status}
             {devMagicLinkUrl ? (
-              <a className="mt-2 block font-medium underline" href={devMagicLinkUrl}>
+              <a
+                className="mt-2 block break-all font-medium underline"
+                href={devMagicLinkUrl}
+              >
                 Open local development magic link
               </a>
             ) : null}

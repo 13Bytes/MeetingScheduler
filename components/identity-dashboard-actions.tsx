@@ -54,9 +54,9 @@ export function RecoverMembershipLinkButton({ membershipId }: { membershipId: st
   return (
     <div className="grid gap-2">
       {membershipUrl ? (
-        <div className="flex gap-2">
+        <div className="flex min-w-0 gap-2">
           <input
-            className={inputClassName}
+            className={`${inputClassName} min-w-0`}
             readOnly
             value={membershipUrl}
             aria-label="Recovered membership link"
@@ -65,6 +65,7 @@ export function RecoverMembershipLinkButton({ membershipId }: { membershipId: st
             type="button"
             variant="secondary"
             size="icon"
+            className="shrink-0"
             aria-label="Copy recovered membership link"
             onClick={copyLink}
           >

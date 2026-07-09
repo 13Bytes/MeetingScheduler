@@ -1,11 +1,60 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { ParticipantAvailabilityPainter } from "@/components/participant-availability-painter";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ConnectedPublicParticipantMeeting,
+  ParticipantAvailabilityPainter,
+} from "@/components/participant-availability-painter";
 import type { MeetingResults } from "@/lib/meeting-results";
 
+const {
+  createAdminMembershipFromInviteMock,
+  createParticipantMembershipMock,
+  createAdminInviteTokenMock,
+  finalizeMeetingMock,
+  reopenMeetingMock,
+  saveAvailabilityRecordsMock,
+  updateMembershipDisplayNameMock,
+  useMutationMock,
+  useQueryMock,
+} = vi.hoisted(() => ({
+  createAdminMembershipFromInviteMock: vi.fn(),
+  createParticipantMembershipMock: vi.fn(),
+  createAdminInviteTokenMock: vi.fn(),
+  finalizeMeetingMock: vi.fn(),
+  reopenMeetingMock: vi.fn(),
+  saveAvailabilityRecordsMock: vi.fn(),
+  updateMembershipDisplayNameMock: vi.fn(),
+  useMutationMock: vi.fn(),
+  useQueryMock: vi.fn(),
+}));
+
+vi.mock("convex/react", () => ({
+  useMutation: useMutationMock,
+  useQuery: useQueryMock,
+}));
+
+vi.mock("@/convex/_generated/api", () => ({
+  api: {
+    meetings: {
+      createParticipantMembership: "meetings:createParticipantMembership",
+      createAdminMembershipFromInvite: "meetings:createAdminMembershipFromInvite",
+      createAdminInviteToken: "meetings:createAdminInviteToken",
+      saveAvailabilityRecords: "meetings:saveAvailabilityRecords",
+      updateMembershipDisplayName: "meetings:updateMembershipDisplayName",
+      finalizeMeeting: "meetings:finalizeMeeting",
+      reopenMeeting: "meetings:reopenMeeting",
+      readPublicMeetingBySlug: "meetings:readPublicMeetingBySlug",
+      readParticipantMeetingByMembershipToken:
+        "meetings:readParticipantMeetingByMembershipToken",
+      readMeetingByMembershipToken: "meetings:readMeetingByMembershipToken",
+      updateMeetingSettings: "meetings:updateMeetingSettings",
+    },
+  },
+}));
+
 const meeting = {
-  title: "Stage 4 planning",
-  slug: "stage-4-planning",
+  title: "Team planning",
+  slug: "team-planning",
   lifecycleState: "open" as const,
   adminMode: "roleBased" as const,
   canonicalTimeZone: "Europe/Berlin",
@@ -35,6 +84,7 @@ const results: MeetingResults = {
   granularityMinutes: 30,
   durationMinutes: 60,
   totalParticipantCount: 1,
+  votedParticipantCount: 1,
   availabilityCount: 2,
   candidateCount: 1,
   detailsVisible: false,
@@ -77,6 +127,45 @@ const results: MeetingResults = {
 };
 
 describe("ParticipantAvailabilityPainter", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.cookie = "ms_membership_team-planning=; Path=/; Max-Age=0; SameSite=Lax";
+    window.history.replaceState(null, "", "/");
+    createAdminMembershipFromInviteMock.mockReset();
+    createParticipantMembershipMock.mockReset();
+    createAdminInviteTokenMock.mockReset();
+    finalizeMeetingMock.mockReset();
+    reopenMeetingMock.mockReset();
+    saveAvailabilityRecordsMock.mockReset();
+    updateMembershipDisplayNameMock.mockReset();
+    useQueryMock.mockReset();
+    useMutationMock.mockReset();
+    useMutationMock.mockImplementation((functionReference) => {
+      if (functionReference === "meetings:createParticipantMembership") {
+        return createParticipantMembershipMock;
+      }
+      if (functionReference === "meetings:createAdminMembershipFromInvite") {
+        return createAdminMembershipFromInviteMock;
+      }
+      if (functionReference === "meetings:createAdminInviteToken") {
+        return createAdminInviteTokenMock;
+      }
+      if (functionReference === "meetings:saveAvailabilityRecords") {
+        return saveAvailabilityRecordsMock;
+      }
+      if (functionReference === "meetings:updateMembershipDisplayName") {
+        return updateMembershipDisplayNameMock;
+      }
+      if (functionReference === "meetings:finalizeMeeting") {
+        return finalizeMeetingMock;
+      }
+      if (functionReference === "meetings:reopenMeeting") {
+        return reopenMeetingMock;
+      }
+      return vi.fn();
+    });
+  });
+
   it("requires a display name before creating a public-link membership", async () => {
     render(
       <ParticipantAvailabilityPainter
@@ -94,16 +183,262 @@ describe("ParticipantAvailabilityPainter", () => {
     ).toBeInTheDocument();
   });
 
+  it("always displays the regular invite link on the meeting page", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={baseData}
+        onCreateMembership={vi.fn()}
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+      "http://localhost:3000/m/team-planning",
+    );
+    expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /private return link/i })).toBeNull();
+  });
+
+  it("uses a client-side admin invite token when joining from an invite link", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/m/team-planning#adminInviteToken=admin-invite-secret",
+    );
+    useQueryMock.mockImplementation((_query, args) =>
+      args === "skip"
+        ? null
+        : {
+            meeting,
+            capabilities: {
+              canAdminister: false,
+              canEditAvailability: true,
+            },
+            results,
+          },
+    );
+    createAdminMembershipFromInviteMock.mockResolvedValue({
+      membershipToken: "admin-member-secret-token",
+    });
+
+    render(<ConnectedPublicParticipantMeeting meetingSlug="team-planning" />);
+
+    await waitFor(() => expect(window.location.hash).toBe(""));
+    fireEvent.change(screen.getByLabelText(/display name/i), {
+      target: { value: "Grace Hopper" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /join and save/i }));
+
+    await waitFor(() =>
+      expect(createAdminMembershipFromInviteMock).toHaveBeenCalledWith({
+        meetingSlug: "team-planning",
+        adminInviteToken: "admin-invite-secret",
+        displayName: "Grace Hopper",
+        privacyMode: "detailed",
+        clientRateLimitKey: expect.any(String),
+      }),
+    );
+  });
+
+  it("keeps a valid remembered membership when an admin invite is present", () => {
+    window.localStorage.setItem(
+      "meeting-scheduler.membership-token.team-planning",
+      "remembered-member-token",
+    );
+    window.history.replaceState(
+      null,
+      "",
+      "/m/team-planning#adminInviteToken=admin-invite-secret",
+    );
+    useQueryMock.mockImplementation((_query, args) => {
+      if (args && args !== "skip" && "membershipToken" in args) {
+        return {
+          meeting,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          capabilities: {
+            canAdminister: false,
+            canEditAvailability: true,
+          },
+          ownAvailabilityRecords: [],
+          results,
+        };
+      }
+      return {
+        meeting,
+        capabilities: {
+          canAdminister: false,
+          canEditAvailability: true,
+        },
+        results,
+      };
+    });
+
+    render(<ConnectedPublicParticipantMeeting meetingSlug="team-planning" />);
+
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      { membershipToken: "remembered-member-token" },
+    );
+    expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+  });
+
+  it("shows the availability workflow before results until the viewer has voted", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{ ...baseData, results }}
+        onCreateMembership={vi.fn()}
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    const availabilityHeading = screen.getByRole("heading", {
+      name: /availability calendar/i,
+    });
+    const resultsHeading = screen.getByRole("heading", {
+      name: /recommended shortlist/i,
+    });
+
+    expect(
+      availabilityHeading.compareDocumentPosition(resultsHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps results before the availability workflow after the viewer has voted", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          ownAvailabilityRecords: [
+            {
+              cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+              startUtc: "2026-06-25T07:00:00.000Z",
+              endUtc: "2026-06-25T07:30:00.000Z",
+              timeZone: "Europe/Berlin",
+              response: "yes",
+            },
+          ],
+          results,
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    const resultsHeading = screen.getByRole("heading", {
+      name: /recommended shortlist/i,
+    });
+    const availabilityHeading = screen.getByRole("heading", {
+      name: /availability calendar/i,
+    });
+
+    expect(
+      resultsHeading.compareDocumentPosition(availabilityHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows regular and private links for returning regular users", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+      "http://localhost:3000/m/team-planning",
+    );
+    expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
+    expect(screen.getByRole("textbox", { name: /private return link/i })).toHaveValue(
+      "http://localhost:3000/join/member-secret-token",
+    );
+    expect(screen.getByText(/only for you/i)).toBeInTheDocument();
+  });
+
+  it("shows an admin invite link for role-based admin users", async () => {
+    const onCreateAdminInviteToken = vi
+      .fn()
+      .mockResolvedValue({ adminInviteToken: "admin-invite-secret" });
+
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "admin", displayName: "Grace Hopper" },
+          capabilities: {
+            canAdminister: true,
+            canEditAvailability: true,
+          },
+        }}
+        existingMembershipToken="admin-secret-token"
+        onSaveAvailability={vi.fn()}
+        onCreateAdminInviteToken={onCreateAdminInviteToken}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(onCreateAdminInviteToken).toHaveBeenCalledWith("admin-secret-token"),
+    );
+    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+      "http://localhost:3000/m/team-planning",
+    );
+    expect(screen.getByRole("textbox", { name: /admin invite link/i })).toHaveValue(
+      "http://localhost:3000/m/team-planning#adminInviteToken=admin-invite-secret",
+    );
+    expect(screen.getByRole("textbox", { name: /private return link/i })).toHaveValue(
+      "http://localhost:3000/join/admin-secret-token",
+    );
+  });
+
+  it("does not show a separate admin invite when everyone is admin", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          meeting: { ...meeting, adminMode: "everyoneAdmin" },
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          capabilities: {
+            canAdminister: true,
+            canEditAvailability: true,
+          },
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        onCreateAdminInviteToken={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+      "http://localhost:3000/m/team-planning",
+    );
+    expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
+  });
+
   it("creates a membership before the first persisted availability write", async () => {
     const onCreateMembership = vi
       .fn()
       .mockResolvedValue({ membershipToken: "member-secret-token" });
     const onSaveAvailability = vi.fn().mockResolvedValue(undefined);
+    const onMembershipTokenAvailable = vi.fn();
     render(
       <ParticipantAvailabilityPainter
         data={baseData}
         onCreateMembership={onCreateMembership}
         onSaveAvailability={onSaveAvailability}
+        onMembershipTokenAvailable={onMembershipTokenAvailable}
         baseDate={new Date("2026-06-25T06:00:00.000Z")}
       />,
     );
@@ -129,9 +464,13 @@ describe("ParticipantAvailabilityPainter", () => {
     );
     expect(
       (
-        await screen.findByRole("textbox", { name: /^personal membership link$/i })
+        await screen.findByRole("textbox", { name: /^private return link$/i })
       ).getAttribute("value"),
     ).toContain("/join/member-secret-token");
+    expect(onMembershipTokenAvailable).toHaveBeenCalledWith(
+      "member-secret-token",
+      "team-planning",
+    );
   });
 
   it("shows a joined notice when saving a public membership without painted cells", async () => {

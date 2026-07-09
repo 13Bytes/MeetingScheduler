@@ -105,10 +105,10 @@ export function IdentityLoginPanel() {
                 <Check className="size-4" aria-hidden="true" />
                 Verification link queued
               </span>
-              <span>Fingerprint {result.tokenFingerprint}</span>
+              <span className="break-all">Fingerprint {result.tokenFingerprint}</span>
               {result.devMagicLinkUrl ? (
                 <a
-                  className="font-medium text-teal-950 underline"
+                  className="break-all font-medium text-teal-950 underline"
                   href={result.devMagicLinkUrl}
                 >
                   Open local development magic link
@@ -116,7 +116,7 @@ export function IdentityLoginPanel() {
               ) : null}
             </div>
           ) : null}
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
             {isSubmitting ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
