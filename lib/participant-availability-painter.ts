@@ -24,6 +24,13 @@ export type AvailabilityPaintState = {
 export type AvailabilityPaintAction =
   | { type: "begin"; cellKey: string; mode: ParticipantPaintMode }
   | { type: "hover"; cellKey: string; grid: ParticipantAvailabilityGrid }
+  | {
+      type: "applyRange";
+      anchorCellKey: string;
+      targetCellKey: string;
+      grid: ParticipantAvailabilityGrid;
+      mode: ParticipantPaintMode;
+    }
   | { type: "commit" }
   | { type: "cancel" }
   | { type: "replace"; responsesByCellKey: Iterable<[string, AvailabilityResponse]> }
@@ -110,6 +117,18 @@ export function availabilityPaintReducer(
 
   if (action.type === "apply") {
     return applyPaintMode(state, action.cellKeys, action.mode);
+  }
+
+  if (action.type === "applyRange") {
+    return applyPaintMode(
+      state,
+      getParticipantCellKeysInRectangle(
+        action.grid,
+        action.anchorCellKey,
+        action.targetCellKey,
+      ),
+      action.mode,
+    );
   }
 
   return applyPaintMode(state, state.previewCellKeys, state.activeMode);
