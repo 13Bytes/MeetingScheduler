@@ -1,8 +1,10 @@
+.agents/
+.claude/
 .convex/
 .next/
 coverage/
 dist/
+convex/_generated/
+docs/*.html
 node_modules/
 out/
-convex/_generated/
-

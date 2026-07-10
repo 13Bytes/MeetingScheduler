@@ -16,6 +16,13 @@ export type AvailabilityResponse = (typeof availabilityResponses)[number];
 export const DEFAULT_GRANULARITY_MINUTES = 30;
 export const DEFAULT_DURATION_MINUTES = 60;
 export const DEFAULT_TIME_ZONE = "UTC";
+export const MAX_ALLOWED_TIME_RANGES = 100;
+export const MAX_ALLOWED_CELLS = 500;
+export const MAX_MEETING_HORIZON_DAYS = 42;
+export const MAX_DURATION_CELLS = 48;
+export const MAX_MEETING_DESCRIPTION_LENGTH = 2_000;
+export const MAX_AVAILABILITY_NOTE_LENGTH = 240;
+export const MAX_ALLOWED_RANGE_LABEL_LENGTH = 120;
 
 export type MeetingSettingsInput = {
   canonicalTimeZone?: string;
@@ -95,13 +102,23 @@ export function normalizeMeetingSettings(
   if (durationMinutes % granularityMinutes !== 0) {
     throw new Error("durationMinutes must be a multiple of granularityMinutes");
   }
+  if (durationMinutes / granularityMinutes > MAX_DURATION_CELLS) {
+    throw new Error(`Meeting duration must cover at most ${MAX_DURATION_CELLS} cells`);
+  }
 
-  const allowedTimeRanges = (input.allowedTimeRanges ?? []).map((range) =>
+  const inputRanges = input.allowedTimeRanges ?? [];
+  if (inputRanges.length > MAX_ALLOWED_TIME_RANGES) {
+    throw new Error(
+      `Meeting settings must include at most ${MAX_ALLOWED_TIME_RANGES} allowed ranges`,
+    );
+  }
+  const allowedTimeRanges = inputRanges.map((range) =>
     normalizeAllowedTimeRange(range, canonicalTimeZone),
   );
   for (const range of allowedTimeRanges) {
     assertAllowedTimeRangeCompatibility(range, durationMinutes, granularityMinutes);
   }
+  assertAllowedRangeBudget(allowedTimeRanges, granularityMinutes);
 
   return {
     canonicalTimeZone,
@@ -120,6 +137,18 @@ export function normalizeMeetingTitle(title: string): string {
     throw new Error("Meeting title must be 160 characters or fewer");
   }
   return normalized;
+}
+
+export function normalizeMeetingDescription(description: string | undefined) {
+  return normalizeOptionalText(
+    description,
+    "Meeting description",
+    MAX_MEETING_DESCRIPTION_LENGTH,
+  );
+}
+
+export function normalizeAvailabilityNote(note: string | undefined) {
+  return normalizeOptionalText(note, "Availability note", MAX_AVAILABILITY_NOTE_LENGTH);
 }
 
 export function normalizeParticipantDisplayName(displayName: string): string {
@@ -145,13 +174,59 @@ export function normalizeAllowedTimeRange(
   if (Date.parse(endUtc) <= Date.parse(startUtc)) {
     throw new Error("allowed time range endUtc must be after startUtc");
   }
+  const label = normalizeOptionalText(
+    input.label,
+    "Allowed time range label",
+    MAX_ALLOWED_RANGE_LABEL_LENGTH,
+  );
 
   return {
     startUtc,
     endUtc,
     timeZone,
-    ...(input.label ? { label: input.label } : {}),
+    ...(label ? { label } : {}),
   };
+}
+
+function assertAllowedRangeBudget(
+  ranges: AllowedTimeRange[],
+  granularityMinutes: number,
+): void {
+  if (ranges.length === 0) {
+    return;
+  }
+  const granularityMs = granularityMinutes * 60 * 1000;
+  const starts = ranges.map((range) => Date.parse(range.startUtc));
+  const ends = ranges.map((range) => Date.parse(range.endUtc));
+  const horizonMs = Math.max(...ends) - Math.min(...starts);
+  if (horizonMs > MAX_MEETING_HORIZON_DAYS * 24 * 60 * 60 * 1000) {
+    throw new Error(
+      `Allowed time ranges must fit within ${MAX_MEETING_HORIZON_DAYS} days`,
+    );
+  }
+  const cellCount = ranges.reduce(
+    (total, range) =>
+      total + (Date.parse(range.endUtc) - Date.parse(range.startUtc)) / granularityMs,
+    0,
+  );
+  if (cellCount > MAX_ALLOWED_CELLS) {
+    throw new Error(`Meeting settings must contain at most ${MAX_ALLOWED_CELLS} cells`);
+  }
+}
+
+function normalizeOptionalText(
+  value: string | undefined,
+  fieldName: string,
+  maxLength: number,
+) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer`);
+  }
+  return normalized;
 }
 
 export function getMembershipCapabilities(

@@ -274,6 +274,11 @@ describe("candidate scoring and ranking", () => {
           response: "yes",
         },
         {
+          membershipId: "alice",
+          cellKey: "2026-06-25T07:30:00.000Z_2026-06-25T08:00:00.000Z",
+          response: "yes",
+        },
+        {
           membershipId: "revoked",
           cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
           response: "yes",
@@ -289,6 +294,29 @@ describe("candidate scoring and ranking", () => {
     expect(results.votedParticipants).toEqual([
       { membershipId: "alice", displayName: "Alice" },
     ]);
+    expect(results.shortlist[0]?.participantDetails).toBeDefined();
+    expect(results.candidates.every((candidate) => !candidate.participantDetails)).toBe(
+      true,
+    );
+  });
+
+  it("rejects result grids that exceed the backend candidate budget", () => {
+    expect(() =>
+      buildMeetingResults({
+        allowedTimeRanges: [
+          {
+            startUtc: "2026-06-01T00:00:00.000Z",
+            endUtc: "2026-06-02T17:45:00.000Z",
+            timeZone: "UTC",
+          },
+        ],
+        participants: [],
+        availabilityRecords: [],
+        granularityMinutes: 5,
+        durationMinutes: 5,
+        timeZone: "UTC",
+      }),
+    ).toThrow(/at most 500 cells/u);
   });
 });
 

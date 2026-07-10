@@ -1,3 +1,5 @@
+import { MAX_ALLOWED_CELLS } from "./model";
+
 export type ResultAvailabilityResponse = "yes" | "reluctant" | "no";
 export type ResultPrivacyMode = "detailed" | "summaryOnly";
 
@@ -79,6 +81,8 @@ export type MeetingResultsInput = {
   includeDetails?: boolean;
 };
 
+export const MAX_RESULT_CANDIDATES = MAX_ALLOWED_CELLS;
+
 export function generateCandidateSlots({
   allowedTimeRanges,
   granularityMinutes,
@@ -94,6 +98,9 @@ export function generateCandidateSlots({
   const granularityMs = granularityMinutes * minuteMs;
   const durationMs = durationMinutes * minuteMs;
   const cells = generateAllowedCells(allowedTimeRanges, granularityMinutes);
+  if (cells.length > MAX_RESULT_CANDIDATES) {
+    throw new Error(`Meeting results support at most ${MAX_RESULT_CANDIDATES} cells`);
+  }
   const allowedCellKeys = new Set(cells.map((cell) => cell.key));
   const starts = new Set(cells.map((cell) => cell.startUtc));
   const candidates: CandidateSlot[] = [];
@@ -171,14 +178,24 @@ export function buildMeetingResults({
   const responsesByMembership = buildResponsesByMembership(availabilityRecords);
   const scoredCandidates = rankScoredCandidates(
     candidates.map((candidate) =>
-      scoreCandidate(
+      scoreCandidate(candidate, activeParticipants, responsesByMembership, false),
+    ),
+  );
+  const shortlist = scoredCandidates
+    .filter((candidate) => candidate.availableParticipantCount > 0)
+    .slice(0, maxShortlist)
+    .map((candidate) => {
+      if (!includeDetails) {
+        return candidate;
+      }
+      const detailed = scoreCandidate(
         candidate,
         activeParticipants,
         responsesByMembership,
-        includeDetails,
-      ),
-    ),
-  );
+        true,
+      );
+      return { ...candidate, participantDetails: detailed.participantDetails };
+    });
 
   return {
     generatedAt,
@@ -191,9 +208,7 @@ export function buildMeetingResults({
     candidateCount: scoredCandidates.length,
     detailsVisible: includeDetails,
     candidates: scoredCandidates,
-    shortlist: scoredCandidates
-      .filter((candidate) => candidate.availableParticipantCount > 0)
-      .slice(0, maxShortlist),
+    shortlist,
     ...(includeDetails
       ? {
           votedParticipants: votedParticipants.map((participant) => ({

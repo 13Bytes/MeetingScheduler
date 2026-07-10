@@ -92,6 +92,41 @@ describe("meeting settings", () => {
       }),
     ).toThrow(/boundaries must align/u);
   });
+
+  it("bounds calendar work before candidate generation", () => {
+    expect(() =>
+      normalizeMeetingSettings({
+        granularityMinutes: 5,
+        durationMinutes: 245,
+      }),
+    ).toThrow(/at most 48 cells/u);
+
+    expect(() =>
+      normalizeMeetingSettings({
+        granularityMinutes: 30,
+        durationMinutes: 60,
+        allowedTimeRanges: [
+          {
+            startUtc: "2026-06-01T00:00:00Z",
+            endUtc: "2026-07-14T00:00:00Z",
+          },
+        ],
+      }),
+    ).toThrow(/within 42 days/u);
+
+    expect(() =>
+      normalizeMeetingSettings({
+        granularityMinutes: 5,
+        durationMinutes: 60,
+        allowedTimeRanges: [
+          {
+            startUtc: "2026-06-01T00:00:00Z",
+            endUtc: "2026-06-03T00:00:00Z",
+          },
+        ],
+      }),
+    ).toThrow(/at most 500 cells/u);
+  });
 });
 
 describe("permission helpers", () => {

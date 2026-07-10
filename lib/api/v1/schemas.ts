@@ -1,10 +1,18 @@
 import { apiTokenScopes, type ApiTokenScope } from "@/convex/domain/agentApi";
-import type { AvailabilityResponse, PrivacyMode } from "@/convex/domain/model";
+import {
+  MAX_ALLOWED_RANGE_LABEL_LENGTH,
+  MAX_ALLOWED_TIME_RANGES,
+  MAX_AVAILABILITY_NOTE_LENGTH,
+  MAX_MEETING_DESCRIPTION_LENGTH,
+  type AvailabilityResponse,
+  type PrivacyMode,
+} from "@/convex/domain/model";
 import { ApiRouteError } from "./responses";
 
 export { apiTokenScopes };
 
 export const maxAvailabilityRecordsPerRequest = 500;
+export const maxApiJsonBytes = 256 * 1024;
 
 export type AllowedTimeRangeInput = {
   startUtc: string;
@@ -22,7 +30,15 @@ export type MeetingSettingsInput = {
 
 export async function readJsonObject(request: Request) {
   try {
-    const parsed = (await request.json()) as unknown;
+    const contentLength = Number(request.headers.get("content-length") ?? "0");
+    if (Number.isFinite(contentLength) && contentLength > maxApiJsonBytes) {
+      throw new ApiRouteError(413, "invalid_request", "Request body is too large.");
+    }
+    const rawBody = await request.text();
+    if (new TextEncoder().encode(rawBody).byteLength > maxApiJsonBytes) {
+      throw new ApiRouteError(413, "invalid_request", "Request body is too large.");
+    }
+    const parsed = JSON.parse(rawBody) as unknown;
     if (!isRecord(parsed)) {
       throw new ApiRouteError(400, "invalid_request", "JSON body must be an object.");
     }
@@ -46,7 +62,11 @@ export function parseCreateMeetingBody(body: Record<string, unknown>) {
   return {
     title: requiredString(body.title, "title"),
     slug: optionalString(body.slug, "slug"),
-    description: optionalString(body.description, "description"),
+    description: optionalString(
+      body.description,
+      "description",
+      MAX_MEETING_DESCRIPTION_LENGTH,
+    ),
     creatorName: optionalString(body.creatorName, "creatorName"),
     creatorPrivacyMode: optionalPrivacyMode(body.creatorPrivacyMode),
     settings: parseMeetingSettings(body.settings),
@@ -89,7 +109,11 @@ export function parseAvailabilityBody(body: Record<string, unknown>) {
           record.response,
           `records[${index}].response`,
         ),
-        note: optionalString(record.note, `records[${index}].note`),
+        note: optionalString(
+          record.note,
+          `records[${index}].note`,
+          MAX_AVAILABILITY_NOTE_LENGTH,
+        ),
       };
     }),
   };
@@ -141,6 +165,13 @@ function parseMeetingSettings(value: unknown): MeetingSettingsInput {
       "settings.allowedTimeRanges must include at least one range.",
     );
   }
+  if (allowedTimeRanges.length > MAX_ALLOWED_TIME_RANGES) {
+    throw new ApiRouteError(
+      400,
+      "invalid_request",
+      `settings.allowedTimeRanges must not exceed ${MAX_ALLOWED_TIME_RANGES} entries.`,
+    );
+  }
   return {
     canonicalTimeZone: optionalString(value.canonicalTimeZone, "canonicalTimeZone"),
     granularityMinutes: optionalNumber(value.granularityMinutes, "granularityMinutes"),
@@ -166,7 +197,11 @@ function parseMeetingSettings(value: unknown): MeetingSettingsInput {
           range.timeZone,
           `settings.allowedTimeRanges[${index}].timeZone`,
         ),
-        label: optionalString(range.label, `settings.allowedTimeRanges[${index}].label`),
+        label: optionalString(
+          range.label,
+          `settings.allowedTimeRanges[${index}].label`,
+          MAX_ALLOWED_RANGE_LABEL_LENGTH,
+        ),
       };
     }),
   };
@@ -179,12 +214,19 @@ function requiredString(value: unknown, name: string) {
   return value;
 }
 
-function optionalString(value: unknown, name: string) {
+function optionalString(value: unknown, name: string, maxLength?: number) {
   if (value === undefined || value === null) {
     return undefined;
   }
   if (typeof value !== "string") {
     throw new ApiRouteError(400, "invalid_request", `${name} must be a string.`);
+  }
+  if (maxLength !== undefined && value.trim().length > maxLength) {
+    throw new ApiRouteError(
+      400,
+      "invalid_request",
+      `${name} must be ${maxLength} characters or fewer.`,
+    );
   }
   return value;
 }

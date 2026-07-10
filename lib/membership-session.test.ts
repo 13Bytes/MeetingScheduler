@@ -19,11 +19,9 @@ describe("membership session storage", () => {
   });
 
   it("writes and reads the membership cookie if local storage is unavailable", () => {
-    const setItem = vi
-      .spyOn(Storage.prototype, "setItem")
-      .mockImplementation(() => {
-        throw new Error("storage unavailable");
-      });
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
     rememberMembershipToken("team-planning", "member-secret-token");
     setItem.mockRestore();
     window.localStorage.clear();

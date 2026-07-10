@@ -10,12 +10,16 @@ import {
 } from "@/lib/rate-limit";
 import { buildAbsoluteAppUrl, routes } from "@/lib/routes";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readBoundedJsonObject } from "@/lib/request-json";
 import { readUserSession } from "@/lib/user-server-session";
 
 export async function POST(request: NextRequest) {
   const session = await readUserSession(request);
   if (!session) {
-    return NextResponse.json({ error: "Open or create a meeting first." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Open or create a meeting first." },
+      { status: 401 },
+    );
   }
 
   try {
@@ -26,7 +30,7 @@ export async function POST(request: NextRequest) {
       limit: 20,
       windowMs: 15 * 60 * 1000,
     });
-    const body = (await request.json()) as { membershipId?: string };
+    const body = await readBoundedJsonObject<{ membershipId?: string }>(request);
     if (!body.membershipId) {
       return NextResponse.json({ error: "Membership id is required." }, { status: 400 });
     }

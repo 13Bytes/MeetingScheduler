@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     response.headers.append(
       "Set-Cookie",
       buildIdentitySessionCookie(sessionToken, {
-        secure: request.nextUrl.protocol === "https:",
+        secure: shouldUseSecureCookie(request),
       }),
     );
     const userSessionToken = createUserSession(
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     response.headers.append(
       "Set-Cookie",
       buildUserSessionCookie(userSessionToken, {
-        secure: request.nextUrl.protocol === "https:",
+        secure: shouldUseSecureCookie(request),
       }),
     );
     return response;
@@ -57,4 +57,14 @@ export async function GET(request: NextRequest) {
     redirectUrl.searchParams.set("error", "invalid-token");
     return NextResponse.redirect(redirectUrl);
   }
+}
+
+function shouldUseSecureCookie(request: NextRequest): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return true;
+  }
+  return (
+    request.nextUrl.protocol === "https:" ||
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() === "https"
+  );
 }

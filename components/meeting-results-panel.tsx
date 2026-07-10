@@ -281,8 +281,8 @@ export function MeetingResultsPanel({
                 ))}
                 {heatmapCandidates.length > 12 ? (
                   <p className="text-xs leading-5 text-slate-500">
-                    Showing the strongest 12 of {heatmapCandidates.length} candidate
-                    slots with at least one attendee.
+                    Showing the strongest 12 of {heatmapCandidates.length} candidate slots
+                    with at least one attendee.
                   </p>
                 ) : null}
                 {hasParticipants && hasCandidates && heatmapCandidates.length === 0 ? (

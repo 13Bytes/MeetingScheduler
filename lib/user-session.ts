@@ -18,8 +18,7 @@ export function createUserSession(
 ): string {
   assertUsableSessionSecret(secret);
   const issuedAt = input.now ?? Date.now();
-  const expiresAt =
-    issuedAt + (input.maxAgeSeconds ?? userSessionMaxAgeSeconds) * 1000;
+  const expiresAt = issuedAt + (input.maxAgeSeconds ?? userSessionMaxAgeSeconds) * 1000;
   const payload: UserSession = {
     userId: input.userId,
     issuedAt,

@@ -447,20 +447,6 @@ export function NewMeetingForm({
           ) : null}
         </div>
       </form>
-
-      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-        <Card>
-          <CardHeader>
-            <CardTitle>After Creation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-6 text-slate-600">
-              You will be redirected to your private admin membership link. The meeting
-              page will show invitation links and your private return link.
-            </p>
-          </CardContent>
-        </Card>
-      </aside>
     </div>
   );
 }

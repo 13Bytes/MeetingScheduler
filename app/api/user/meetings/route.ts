@@ -9,6 +9,7 @@ import {
   rateLimitErrorResponse,
 } from "@/lib/rate-limit";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readBoundedJsonObject } from "@/lib/request-json";
 import { ensureUserSession } from "@/lib/user-server-session";
 
 type CreateMeetingRequest = {
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
       limit: 30,
       windowMs: 15 * 60 * 1000,
     });
-    const body = (await request.json()) as CreateMeetingRequest;
+    const body = await readBoundedJsonObject<CreateMeetingRequest>(request);
     if (!body.title) {
       return NextResponse.json({ error: "Meeting title is required." }, { status: 400 });
     }

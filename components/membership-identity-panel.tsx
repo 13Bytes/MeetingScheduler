@@ -182,7 +182,7 @@ export function MembershipIdentityPanel({
                 <Mail className="size-4" aria-hidden="true" />
               )}
               Send verification link
-              </Button>
+            </Button>
           </div>
         )}
         {status ? (

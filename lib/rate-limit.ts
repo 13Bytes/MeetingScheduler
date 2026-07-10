@@ -53,7 +53,25 @@ export async function hashRateLimitKey(value: string): Promise<string> {
   return bytesToBase64Url(new Uint8Array(digest)).slice(0, 32);
 }
 
-export function getClientIp(request: Request): string {
+type ProxyTrustEnv = {
+  NODE_ENV?: string;
+  VERCEL?: string;
+  CF_PAGES?: string;
+  MEETING_SCHEDULER_TRUST_PROXY_HEADERS?: string;
+};
+
+export function getClientIp(request: Request, env: ProxyTrustEnv = process.env): string {
+  const trustForwardedHeaders =
+    env.NODE_ENV !== "production" ||
+    env.VERCEL === "1" ||
+    env.CF_PAGES === "1" ||
+    env.MEETING_SCHEDULER_TRUST_PROXY_HEADERS === "true";
+  if (!trustForwardedHeaders) {
+    return "unknown";
+  }
+  if (env.CF_PAGES === "1") {
+    return request.headers.get("cf-connecting-ip")?.trim() || "unknown";
+  }
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip")?.trim() ||

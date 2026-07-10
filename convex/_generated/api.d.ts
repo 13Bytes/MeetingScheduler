@@ -12,6 +12,7 @@ import type * as agentApi from "../agentApi.js";
 import type * as domain_agentApi from "../domain/agentApi.js";
 import type * as domain_finalization from "../domain/finalization.js";
 import type * as domain_identity from "../domain/identity.js";
+import type * as domain_limits from "../domain/limits.js";
 import type * as domain_model from "../domain/model.js";
 import type * as domain_rateLimit from "../domain/rateLimit.js";
 import type * as domain_results from "../domain/results.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   "domain/agentApi": typeof domain_agentApi;
   "domain/finalization": typeof domain_finalization;
   "domain/identity": typeof domain_identity;
+  "domain/limits": typeof domain_limits;
   "domain/model": typeof domain_model;
   "domain/rateLimit": typeof domain_rateLimit;
   "domain/results": typeof domain_results;

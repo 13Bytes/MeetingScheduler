@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -13,6 +14,8 @@ import {
   makeAvailabilityCellKey,
   normalizeEmailAddress,
   normalizeFinalizedSlot,
+  normalizeAvailabilityNote,
+  normalizeMeetingDescription,
   normalizeMeetingSettings,
   normalizeMeetingTitle,
   normalizeParticipantDisplayName,
@@ -51,6 +54,11 @@ import {
   membershipRoleValidator,
   privacyModeValidator,
 } from "./domain/validators";
+import {
+  MAX_AVAILABILITY_BATCH_SIZE,
+  MAX_AVAILABILITY_RECORDS,
+  MAX_MEETING_MEMBERSHIPS,
+} from "./domain/limits";
 
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
 const DEV_INTERNAL_IDENTITY_SECRET =
@@ -60,6 +68,9 @@ const NOTIFICATION_DELIVERY_LEASE_MS = 15 * 60 * 1000;
 const MAX_NOTIFICATION_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const ADMIN_INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const AVAILABILITY_PRUNE_BATCH_SIZE = 200;
+const MAX_DASHBOARD_MEMBERSHIPS = 200;
+const MAX_VERIFIED_EMAILS = 20;
 
 const meetingSettingsArgs = {
   canonicalTimeZone: v.optional(v.string()),
@@ -258,7 +269,7 @@ export const createMeeting = mutation({
     const meetingId = await ctx.db.insert("meetings", {
       title,
       slug,
-      description: args.description?.trim(),
+      description: normalizeMeetingDescription(args.description),
       lifecycleState: "open",
       lifecycleRevision: 1,
       adminMode: args.adminMode ?? "roleBased",
@@ -310,29 +321,6 @@ export const createMeeting = mutation({
       adminMembershipId,
       slug,
       adminMembershipToken: adminToken.rawToken,
-    };
-  },
-});
-
-export const readMeetingBySlug = query({
-  args: {
-    slug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const meeting = await findMeetingBySlug(ctx, args.slug);
-    if (!meeting) {
-      return null;
-    }
-
-    const allowedRanges = await ctx.db
-      .query("allowedTimeRanges")
-      .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-      .collect();
-
-    return {
-      meeting,
-      allowedRanges,
-      capabilities: getMembershipCapabilities(meeting, null),
     };
   },
 });
@@ -453,6 +441,7 @@ export const createMembership = mutation({
     }
 
     const requestedRole: MembershipRole = args.role ?? "member";
+    await assertMeetingMembershipCapacity(ctx, meeting._id);
     let actorMembershipId: Id<"memberships"> | undefined;
     if (requestedRole === "admin") {
       const actor = args.createdByMembershipToken
@@ -535,6 +524,7 @@ export const createParticipantMembership = mutation({
     }
 
     const displayName = normalizeParticipantDisplayName(args.displayName);
+    await assertMeetingMembershipCapacity(ctx, meeting._id);
     const membershipToken = await createSecretToken("membership");
     const membershipId = await ctx.db.insert("memberships", {
       meetingId: meeting._id,
@@ -664,6 +654,7 @@ export const createAdminMembershipFromInvite = mutation({
     assertCanAdminister(meeting, creator);
 
     const displayName = normalizeParticipantDisplayName(args.displayName);
+    await assertMeetingMembershipCapacity(ctx, meeting._id);
     const membershipToken = await createSecretToken("membership");
     const membershipId = await ctx.db.insert("memberships", {
       meetingId: meeting._id,
@@ -774,8 +765,10 @@ export const updateMeetingSettings = mutation({
       : undefined;
 
     await ctx.db.patch(meeting._id, {
-      ...(args.title !== undefined ? { title: args.title.trim() } : {}),
-      ...(args.description !== undefined ? { description: args.description.trim() } : {}),
+      ...(args.title !== undefined ? { title: normalizeMeetingTitle(args.title) } : {}),
+      ...(args.description !== undefined
+        ? { description: normalizeMeetingDescription(args.description) }
+        : {}),
       ...(args.adminMode !== undefined ? { adminMode: args.adminMode } : {}),
       ...(normalizedSettings
         ? {
@@ -806,6 +799,42 @@ export const updateMeetingSettings = mutation({
     });
 
     return { meetingId: meeting._id };
+  },
+});
+
+export const pruneAvailabilityOutsideRangesBatch = internalMutation({
+  args: {
+    meetingId: v.id("meetings"),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting) {
+      return null;
+    }
+    const page = await ctx.db
+      .query("availabilityRecords")
+      .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: AVAILABILITY_PRUNE_BATCH_SIZE,
+      });
+    for (const record of page.page) {
+      if (!isSlotInsideAllowedRanges(record, meeting.allowedTimeRanges)) {
+        await ctx.db.delete(record._id);
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.meetings.pruneAvailabilityOutsideRangesBatch,
+        {
+          meetingId: meeting._id,
+          cursor: page.continueCursor,
+        },
+      );
+    }
+    return null;
   },
 });
 
@@ -916,90 +945,6 @@ export const reopenMeeting = mutation({
   },
 });
 
-export const createMagicLink = mutation({
-  args: {
-    email: v.string(),
-    displayName: v.optional(v.string()),
-    purpose: v.union(v.literal("emailVerification"), v.literal("membershipRecovery")),
-    membershipId: v.optional(v.id("memberships")),
-    expiresAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const expiresAt = normalizeMagicLinkExpiry({
-      now,
-      requestedExpiresAt: args.expiresAt,
-    });
-
-    const emailIdentityId = await upsertEmailIdentity(
-      ctx,
-      args.email,
-      args.displayName,
-      now,
-    );
-    const recoveryTarget = await validateMagicLinkTarget(ctx, {
-      purpose: args.purpose,
-      emailIdentityId,
-      membershipId: args.membershipId,
-    });
-    if (args.purpose === "emailVerification") {
-      await assertEmailVerificationRequestAllowed(ctx, emailIdentityId, now);
-    }
-    const magicLinkToken = await createSecretToken("magicLink");
-    const magicLinkId = await ctx.db.insert("magicLinks", {
-      purpose: args.purpose,
-      emailIdentityId,
-      meetingId: recoveryTarget.meetingId,
-      membershipId: recoveryTarget.membershipId,
-      tokenHash: magicLinkToken.tokenHash,
-      tokenFingerprint: magicLinkToken.tokenFingerprint,
-      tokenVersion: 1,
-      tokenCreatedAt: now,
-      expiresAt,
-      createdAt: now,
-    });
-
-    await ctx.db.insert("notificationOutbox", {
-      meetingId: recoveryTarget.meetingId,
-      membershipId: recoveryTarget.membershipId,
-      emailIdentityId,
-      kind: `magicLink.${args.purpose}`,
-      status: "cancelled",
-      dedupeKey: `magicLink:${magicLinkToken.tokenFingerprint}`,
-      payload: {
-        magicLinkId,
-        tokenFingerprint: magicLinkToken.tokenFingerprint,
-      },
-      attempts: 0,
-      lastError: "Magic link delivery requires the server email adapter route",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return {
-      magicLinkId,
-      tokenFingerprint: magicLinkToken.tokenFingerprint,
-      devMagicLinkToken: shouldExposeDevMagicLinkToken()
-        ? magicLinkToken.rawToken
-        : undefined,
-      deliveryQueued: false,
-    };
-  },
-});
-
-export const requestEmailVerification = mutation({
-  args: {
-    email: v.string(),
-    displayName: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    return await createEmailVerificationMagicLink(ctx, {
-      email: args.email,
-      displayName: args.displayName,
-    });
-  },
-});
-
 export const requestEmailVerificationForDelivery = mutation({
   args: {
     internalSecret: v.string(),
@@ -1036,8 +981,8 @@ export const listQueuedEmailNotifications = query({
       }
       const notifications = await ctx.db
         .query("notificationOutbox")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .collect();
+        .withIndex("by_status_updated", (q) => q.eq("status", status))
+        .take(Math.max(limit * 4, 50));
       for (const notification of notifications) {
         if (
           notificationIds.length < limit &&
@@ -1272,7 +1217,7 @@ export const upsertAvailabilityRecord = mutation({
       timeZone: meeting.canonicalTimeZone,
       cellKey,
       response: args.response,
-      note: args.note?.trim(),
+      note: normalizeAvailabilityNote(args.note),
       updatedAt: now,
     };
 
@@ -1303,6 +1248,11 @@ export const saveAvailabilityRecords = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    if (args.records.length > MAX_AVAILABILITY_BATCH_SIZE) {
+      throw new Error(
+        `Availability batches must contain at most ${MAX_AVAILABILITY_BATCH_SIZE} records`,
+      );
+    }
     const membership = await requireMembershipByToken(ctx, args.membershipToken);
     await assertConvexRateLimit(ctx, {
       scope: "availability.batch_save",
@@ -1350,7 +1300,10 @@ export const listAvailabilityByMeeting = query({
     const memberships = await ctx.db
       .query("memberships")
       .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-      .collect();
+      .take(MAX_MEETING_MEMBERSHIPS + 1);
+    if (memberships.length > MAX_MEETING_MEMBERSHIPS) {
+      throw new Error(`Meeting exceeds the ${MAX_MEETING_MEMBERSHIPS}-member limit`);
+    }
     const participants: ResultParticipant[] = memberships.map((candidate) => ({
       membershipId: candidate._id,
       displayName: candidate.displayName,
@@ -1377,7 +1330,10 @@ export const listAvailabilityByMeeting = query({
           ? q.eq("meetingId", meeting._id)
           : q.eq("membershipId", membership._id),
       )
-      .collect();
+      .take(MAX_AVAILABILITY_RECORDS + 1);
+    if (records.length > MAX_AVAILABILITY_RECORDS) {
+      throw new Error("Meeting has too many availability records");
+    }
 
     return {
       meetingId: meeting._id,
@@ -1387,52 +1343,6 @@ export const listAvailabilityByMeeting = query({
         ? records.filter((record) => activeMembershipIds.has(record.membershipId))
         : records,
     };
-  },
-});
-
-export const consumeMagicLink = mutation({
-  args: {
-    magicLinkToken: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const tokenHash = await hashSecretToken(args.magicLinkToken);
-    await assertConvexRateLimit(ctx, {
-      scope: "magic_link.consume",
-      key: tokenFingerprintFromHash(tokenHash),
-      limit: 10,
-      windowMs: RATE_LIMIT_WINDOW_MS,
-      now,
-    });
-    const magicLink = await ctx.db
-      .query("magicLinks")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
-      .unique();
-
-    assertMagicLinkCanBeConsumed(magicLink, now);
-    if (magicLink.purpose === "emailVerification") {
-      throw new Error("Use the email verification flow for this magic link");
-    }
-
-    await ctx.db.patch(magicLink._id, { consumedAt: now });
-    return {
-      magicLinkId: magicLink._id,
-      purpose: magicLink.purpose,
-      emailIdentityId: magicLink.emailIdentityId,
-      meetingId: magicLink.meetingId,
-      membershipId: magicLink.membershipId,
-    };
-  },
-});
-
-export const completeEmailVerification = mutation({
-  args: {
-    magicLinkToken: v.string(),
-  },
-  handler: async (ctx, args) => {
-    return await completeEmailVerificationForUserId(ctx, {
-      magicLinkToken: args.magicLinkToken,
-    });
   },
 });
 
@@ -1517,7 +1427,7 @@ export const listUserDashboard = query({
     const memberships = await ctx.db
       .query("memberships")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+      .take(MAX_DASHBOARD_MEMBERSHIPS);
     const rows = await buildDashboardMembershipRows(ctx, memberships);
 
     return {
@@ -1549,66 +1459,6 @@ export const listUserDashboard = query({
   },
 });
 
-export const listIdentityDashboard = query({
-  args: {
-    internalSecret: v.string(),
-    emailIdentityId: v.id("emailIdentities"),
-  },
-  handler: async (ctx, args) => {
-    assertInternalIdentitySecret(args.internalSecret);
-    const identity = await ctx.db.get(args.emailIdentityId);
-    assertVerifiedEmailIdentity(identity);
-
-    const memberships = await ctx.db
-      .query("memberships")
-      .withIndex("by_email_identity", (q) => q.eq("emailIdentityId", identity._id))
-      .collect();
-    const rows = await buildDashboardMembershipRows(ctx, memberships);
-
-    return {
-      identity: {
-        emailIdentityId: identity._id,
-        normalizedEmail: identity.normalizedEmail,
-        verifiedAt: identity.verifiedAt,
-        userId: identity.userId,
-      },
-      memberships: rows
-        .filter((row) => row.revokedAt === undefined)
-        .sort((left, right) => right.updatedAt - left.updatedAt)
-        .map((row) => ({
-          membershipId: row._id,
-          role: row.role,
-          displayName: row.displayName,
-          hasAvailability: row.hasAvailability,
-          canRecover: isMembershipRecoverable({
-            role: row.role,
-            revokedAt: row.revokedAt,
-            hasAvailability: row.hasAvailability,
-          }),
-          meeting: row.meeting,
-        })),
-    };
-  },
-});
-
-export const readVerifiedEmailIdentity = query({
-  args: {
-    internalSecret: v.string(),
-    emailIdentityId: v.id("emailIdentities"),
-  },
-  handler: async (ctx, args) => {
-    assertInternalIdentitySecret(args.internalSecret);
-    const identity = await ctx.db.get(args.emailIdentityId);
-    assertVerifiedEmailIdentity(identity);
-
-    return {
-      emailIdentityId: identity._id,
-      normalizedEmail: identity.normalizedEmail,
-      verifiedAt: identity.verifiedAt,
-    };
-  },
-});
-
 export const readEmailIdentitySession = query({
   args: {
     internalSecret: v.string(),
@@ -1626,76 +1476,6 @@ export const readEmailIdentitySession = query({
       emailIdentityId: identity._id,
       normalizedEmail: identity.normalizedEmail,
       verifiedAt: identity.verifiedAt,
-    };
-  },
-});
-
-export const createRecoveredMembershipLink = mutation({
-  args: {
-    internalSecret: v.string(),
-    emailIdentityId: v.id("emailIdentities"),
-    membershipId: v.id("memberships"),
-  },
-  handler: async (ctx, args) => {
-    assertInternalIdentitySecret(args.internalSecret);
-    const now = Date.now();
-    await assertConvexRateLimit(ctx, {
-      scope: "membership.recovery",
-      key: args.emailIdentityId,
-      limit: 20,
-      windowMs: RATE_LIMIT_WINDOW_MS,
-      now,
-    });
-    const identity = await ctx.db.get(args.emailIdentityId);
-    assertVerifiedEmailIdentity(identity);
-    const membership = await ctx.db.get(args.membershipId);
-    if (
-      !membership ||
-      membership.revokedAt !== undefined ||
-      membership.emailIdentityId !== args.emailIdentityId
-    ) {
-      throw new Error("Membership is not recoverable for this email identity");
-    }
-    const availability = await ctx.db
-      .query("availabilityRecords")
-      .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
-      .first();
-    if (
-      !isMembershipRecoverable({
-        role: membership.role,
-        revokedAt: membership.revokedAt,
-        hasAvailability: Boolean(availability),
-      })
-    ) {
-      throw new Error("Membership is not recoverable for this email identity");
-    }
-
-    const accessToken = await createSecretToken("membership");
-    await ctx.db.insert("membershipAccessTokens", {
-      membershipId: membership._id,
-      tokenHash: accessToken.tokenHash,
-      tokenFingerprint: accessToken.tokenFingerprint,
-      tokenVersion: 1,
-      tokenCreatedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await insertAuditEvent(ctx, {
-      meetingId: membership.meetingId,
-      actorMembershipId: membership._id,
-      targetMembershipId: membership._id,
-      kind: "membership.recovery_link_created",
-      metadata: {
-        tokenFingerprint: accessToken.tokenFingerprint,
-      },
-      now,
-    });
-
-    return {
-      membershipId: membership._id,
-      membershipToken: accessToken.rawToken,
-      tokenFingerprint: accessToken.tokenFingerprint,
     };
   },
 });
@@ -1906,7 +1686,7 @@ async function listVerifiedEmailsForUser(ctx: QueryLikeCtx, userId: Id<"users">)
   const identities = await ctx.db
     .query("emailIdentities")
     .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
+    .take(MAX_VERIFIED_EMAILS);
   return identities
     .filter((identity) => identity.verifiedAt !== undefined)
     .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -1990,11 +1770,17 @@ async function buildResultsForMeeting(
   const memberships = await ctx.db
     .query("memberships")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(MAX_MEETING_MEMBERSHIPS + 1);
+  if (memberships.length > MAX_MEETING_MEMBERSHIPS) {
+    throw new Error(`Meeting exceeds the ${MAX_MEETING_MEMBERSHIPS}-member limit`);
+  }
   const availabilityRecords = await ctx.db
     .query("availabilityRecords")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(MAX_AVAILABILITY_RECORDS + 1);
+  if (availabilityRecords.length > MAX_AVAILABILITY_RECORDS) {
+    throw new Error("Meeting has too many availability records to calculate results");
+  }
   const participants: ResultParticipant[] = memberships.map((membership) => ({
     membershipId: membership._id,
     displayName: membership.displayName,
@@ -2165,6 +1951,19 @@ async function requireMeeting(ctx: QueryLikeCtx, meetingId: Id<"meetings">) {
   return meeting;
 }
 
+async function assertMeetingMembershipCapacity(
+  ctx: QueryLikeCtx,
+  meetingId: Id<"meetings">,
+) {
+  const memberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
+    .take(MAX_MEETING_MEMBERSHIPS);
+  if (memberships.length >= MAX_MEETING_MEMBERSHIPS) {
+    throw new Error(`Meeting supports at most ${MAX_MEETING_MEMBERSHIPS} memberships`);
+  }
+}
+
 async function upsertEmailIdentity(
   ctx: MutationLikeCtx,
   email: string,
@@ -2194,42 +1993,6 @@ async function upsertEmailIdentity(
     createdAt: now,
     updatedAt: now,
   });
-}
-
-async function validateMagicLinkTarget(
-  ctx: MutationLikeCtx,
-  args: {
-    purpose: "emailVerification" | "membershipRecovery";
-    emailIdentityId: Id<"emailIdentities">;
-    membershipId?: Id<"memberships">;
-  },
-) {
-  if (args.purpose === "emailVerification") {
-    if (args.membershipId) {
-      throw new Error("Email verification links cannot target a membership");
-    }
-    return {
-      meetingId: undefined,
-      membershipId: undefined,
-    };
-  }
-
-  if (!args.membershipId) {
-    throw new Error("Membership recovery links require a membershipId");
-  }
-
-  const membership = await ctx.db.get(args.membershipId);
-  if (!membership || membership.revokedAt !== undefined) {
-    throw new Error("Membership recovery target is invalid");
-  }
-  if (membership.emailIdentityId !== args.emailIdentityId) {
-    throw new Error("Membership recovery email does not match the membership");
-  }
-
-  return {
-    meetingId: membership.meetingId,
-    membershipId: membership._id,
-  };
 }
 
 async function assertEmailVerificationRequestAllowed(
@@ -2339,13 +2102,16 @@ function assertInternalIdentitySecret(providedSecret: string): void {
     if (
       isExplicitLocalDevelopmentRuntime() &&
       process.env.MEETING_SCHEDULER_ALLOW_DEV_IDENTITY_SECRET === "true" &&
-      providedSecret === DEV_INTERNAL_IDENTITY_SECRET
+      constantTimeEqualString(providedSecret, DEV_INTERNAL_IDENTITY_SECRET)
     ) {
       return;
     }
     throw new Error(`${INTERNAL_IDENTITY_SECRET_ENV} is required`);
   }
-  if (providedSecret !== expectedSecret) {
+  if (expectedSecret.length < 32) {
+    throw new Error(`${INTERNAL_IDENTITY_SECRET_ENV} must be at least 32 characters`);
+  }
+  if (!constantTimeEqualString(providedSecret, expectedSecret)) {
     throw new Error("Internal identity authorization failed");
   }
 }
@@ -2388,29 +2154,21 @@ async function replaceAllowedTimeRanges(
   }
 
   await insertAllowedTimeRanges(ctx, args);
-  await pruneAvailabilityOutsideRanges(ctx, args.meetingId, args.ranges);
+  await ctx.scheduler.runAfter(0, internal.meetings.pruneAvailabilityOutsideRangesBatch, {
+    meetingId: args.meetingId,
+  });
 }
 
-async function pruneAvailabilityOutsideRanges(
-  ctx: MutationLikeCtx,
-  meetingId: Id<"meetings">,
-  allowedTimeRanges: {
-    startUtc: string;
-    endUtc: string;
-    timeZone: string;
-    label?: string;
-  }[],
-) {
-  const records = await ctx.db
-    .query("availabilityRecords")
-    .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
-    .collect();
-
-  for (const record of records) {
-    if (!isSlotInsideAllowedRanges(record, allowedTimeRanges)) {
-      await ctx.db.delete(record._id);
-    }
+function constantTimeEqualString(left: string, right: string): boolean {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length, 1);
+  let diff = leftBytes.length ^ rightBytes.length;
+  for (let index = 0; index < maxLength; index += 1) {
+    diff |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
   }
+  return diff === 0;
 }
 
 async function insertAllowedTimeRanges(
@@ -2585,7 +2343,7 @@ async function saveAvailabilityRecord(
     timeZone: args.meeting.canonicalTimeZone,
     cellKey,
     response: args.record.response,
-    note: args.record.note?.trim(),
+    note: normalizeAvailabilityNote(args.record.note),
     updatedAt: now,
   };
 

@@ -8,7 +8,9 @@ import {
   getMembershipCapabilities,
   isSlotInsideAllowedRanges,
   makeAvailabilityCellKey,
+  normalizeAvailabilityNote,
   normalizeFinalizedSlot,
+  normalizeMeetingDescription,
   normalizeMeetingSettings,
   normalizeMeetingTitle,
   normalizeParticipantDisplayName,
@@ -41,6 +43,11 @@ import {
   selectApiMembershipForMeeting,
   type ApiTokenScope,
 } from "./domain/agentApi";
+import {
+  MAX_AVAILABILITY_BATCH_SIZE,
+  MAX_AVAILABILITY_RECORDS,
+  MAX_MEETING_MEMBERSHIPS,
+} from "./domain/limits";
 
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
 const DEV_INTERNAL_IDENTITY_SECRET =
@@ -191,7 +198,7 @@ export const createMeeting = mutation({
     const meetingId = await ctx.db.insert("meetings", {
       title,
       slug,
-      description: args.description?.trim(),
+      description: normalizeMeetingDescription(args.description),
       lifecycleState: "open",
       lifecycleRevision: 1,
       adminMode: "roleBased",
@@ -326,6 +333,7 @@ export const createParticipant = mutation({
         role: existingMembership.role,
       };
     }
+    await assertMeetingMembershipCapacity(ctx, meeting._id);
     await assertApiMutationRateLimit(ctx, "api.participants.create", credential);
 
     const membershipToken = await createSecretToken("membership");
@@ -376,6 +384,11 @@ export const saveAvailability = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    if (args.records.length > MAX_AVAILABILITY_BATCH_SIZE) {
+      throw new Error(
+        `Availability batches must contain at most ${MAX_AVAILABILITY_BATCH_SIZE} records`,
+      );
+    }
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "availability:write",
     ]);
@@ -600,6 +613,19 @@ async function requireMeetingBySlug(ctx: QueryLikeCtx, slug: string) {
   return meeting;
 }
 
+async function assertMeetingMembershipCapacity(
+  ctx: QueryLikeCtx,
+  meetingId: Id<"meetings">,
+) {
+  const memberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
+    .take(MAX_MEETING_MEMBERSHIPS);
+  if (memberships.length >= MAX_MEETING_MEMBERSHIPS) {
+    throw new Error(`Meeting supports at most ${MAX_MEETING_MEMBERSHIPS} memberships`);
+  }
+}
+
 function normalizeTokenLabel(label: string | undefined) {
   const normalized = label?.trim();
   if (!normalized) {
@@ -630,11 +656,17 @@ async function buildResultsForMeeting(
   const memberships = await ctx.db
     .query("memberships")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(MAX_MEETING_MEMBERSHIPS + 1);
+  if (memberships.length > MAX_MEETING_MEMBERSHIPS) {
+    throw new Error(`Meeting exceeds the ${MAX_MEETING_MEMBERSHIPS}-member limit`);
+  }
   const availabilityRecords = await ctx.db
     .query("availabilityRecords")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(MAX_AVAILABILITY_RECORDS + 1);
+  if (availabilityRecords.length > MAX_AVAILABILITY_RECORDS) {
+    throw new Error("Meeting has too many availability records to calculate results");
+  }
   const participants: ResultParticipant[] = memberships.map((membership) => ({
     membershipId: membership._id,
     displayName: membership.displayName,
@@ -863,7 +895,7 @@ async function saveAvailabilityRecord(
     timeZone: args.meeting.canonicalTimeZone,
     cellKey,
     response: args.record.response,
-    note: args.record.note?.trim(),
+    note: normalizeAvailabilityNote(args.record.note),
     updatedAt: now,
   };
 
@@ -904,6 +936,9 @@ async function assertInternalIdentitySecret(providedSecret: string): Promise<voi
       return;
     }
     throw new Error(`${INTERNAL_IDENTITY_SECRET_ENV} is required`);
+  }
+  if (expectedSecret.length < 32) {
+    throw new Error(`${INTERNAL_IDENTITY_SECRET_ENV} must be at least 32 characters`);
   }
   if (!(await constantTimeEqualString(providedSecret, expectedSecret))) {
     throw new Error("Internal identity authorization failed");

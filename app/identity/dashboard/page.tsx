@@ -106,9 +106,7 @@ export default async function IdentityDashboardPage({
   );
 }
 
-async function loadIdentityDashboard(
-  userId: string,
-): Promise<IdentityMeetingsDashboard> {
+async function loadIdentityDashboard(userId: string): Promise<IdentityMeetingsDashboard> {
   const convex = new ConvexHttpClient(getConvexUrl());
   return await convex.query(api.meetings.listUserDashboard, {
     internalSecret: getInternalIdentitySecret(),

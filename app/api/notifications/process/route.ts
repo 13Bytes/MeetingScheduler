@@ -107,10 +107,21 @@ function authorizeProcessor(request: NextRequest) {
   const providedSecret = request.headers
     .get("authorization")
     ?.replace(/^Bearer\s+/iu, "");
-  if (providedSecret !== expectedSecret) {
+  if (!providedSecret || !constantTimeEqualString(providedSecret, expectedSecret)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   return null;
+}
+
+function constantTimeEqualString(left: string, right: string): boolean {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length, 1);
+  let diff = leftBytes.length ^ rightBytes.length;
+  for (let index = 0; index < maxLength; index += 1) {
+    diff |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+  return diff === 0;
 }
 
 function getAppOrigin(request: NextRequest): string {

@@ -7,23 +7,6 @@ import { CalendarGridPreview } from "@/components/ui/calendar-grid-preview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { routes } from "@/lib/routes";
 
-const foundationItems = [
-  {
-    icon: CalendarDays,
-    label: "Calendar-heavy UI primitives",
-    text: "Responsive surfaces, buttons, badges, and a reusable calendar grid preview.",
-  },
-  {
-    icon: Link2,
-    label: "Secret-link route map",
-    text: "Placeholders for public polls, membership links, and organizer links.",
-  },
-  {
-    icon: Mail,
-    label: "Optional email recovery",
-    text: "Verify email with a passwordless magic link and recover attached memberships.",
-  },
-];
 
 export default function HomePage() {
   return (
@@ -57,17 +40,6 @@ export default function HomePage() {
             <CalendarGridPreview />
           </CardContent>
         </Card>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        {foundationItems.map((item) => (
-          <RoutePlaceholder
-            key={item.label}
-            icon={item.icon}
-            title={item.label}
-            description={item.text}
-          />
-        ))}
       </section>
     </AppShell>
   );

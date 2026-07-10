@@ -13,10 +13,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { getConvexUrl, getInternalIdentitySecret } from "@/lib/identity-internal";
 import { safeErrorMessage } from "@/lib/security-redaction";
-import {
-  userSessionCookieName,
-  verifyUserSession,
-} from "@/lib/user-session";
+import { userSessionCookieName, verifyUserSession } from "@/lib/user-session";
 import { getIdentitySessionSecret } from "@/lib/identity-session";
 
 export const dynamic = "force-dynamic";

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   enforceRequestRateLimit,
   evaluateRateLimit,
+  getClientIp,
   RateLimitError,
   resetInMemoryRateLimitsForTest,
 } from "./rate-limit";
@@ -65,5 +66,18 @@ describe("rate-limit helpers", () => {
         now: 2_000,
       }),
     ).rejects.toBeInstanceOf(RateLimitError);
+  });
+
+  it("ignores spoofable forwarding headers unless the deployment is trusted", () => {
+    const request = new Request("https://app.example.com", {
+      headers: { "x-forwarded-for": "203.0.113.1, 10.0.0.1" },
+    });
+    expect(getClientIp(request, { NODE_ENV: "production" })).toBe("unknown");
+    expect(
+      getClientIp(request, {
+        NODE_ENV: "production",
+        MEETING_SCHEDULER_TRUST_PROXY_HEADERS: "true",
+      }),
+    ).toBe("203.0.113.1");
   });
 });

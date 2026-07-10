@@ -11,6 +11,11 @@ type IdentityEnv = {
 export function getInternalIdentitySecret(env: IdentityEnv = process.env): string {
   const configuredSecret = env.MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET;
   if (configuredSecret) {
+    if (configuredSecret.length < 32) {
+      throw new Error(
+        "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET must be at least 32 characters",
+      );
+    }
     return configuredSecret;
   }
   if (env.NODE_ENV === "production") {

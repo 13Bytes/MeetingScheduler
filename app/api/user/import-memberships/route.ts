@@ -9,6 +9,7 @@ import {
   rateLimitErrorResponse,
 } from "@/lib/rate-limit";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readBoundedJsonObject } from "@/lib/request-json";
 import { ensureUserSession } from "@/lib/user-server-session";
 
 export async function POST(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
       limit: 60,
       windowMs: 15 * 60 * 1000,
     });
-    const body = (await request.json()) as { membershipTokens?: string[] };
+    const body = await readBoundedJsonObject<{ membershipTokens?: string[] }>(request);
     const membershipTokens = Array.from(
       new Set(
         (body.membershipTokens ?? [])

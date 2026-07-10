@@ -9,6 +9,7 @@ import {
 } from "./domain/retention";
 
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
+const CASCADE_BATCH_SIZE = 100;
 
 const retentionWindowArgs = v.optional(
   v.object({
@@ -180,7 +181,10 @@ export const cleanupRetainedData = mutation({
       const meetingMemberships = await ctx.db
         .query("memberships")
         .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-        .collect();
+        .take(CASCADE_BATCH_SIZE + 1);
+      if (meetingMemberships.length > CASCADE_BATCH_SIZE) {
+        continue;
+      }
       if (
         meetingMemberships.length === 0 ||
         meetingMemberships.some((membership) => membership.emailIdentityId)
@@ -222,35 +226,46 @@ async function countOrDeleteAnonymousMeeting(
   const memberships = await ctx.db
     .query("memberships")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(CASCADE_BATCH_SIZE + 1);
   const membershipIds = new Set<Id<"memberships">>(
     memberships.map((membership) => membership._id),
   );
   const availabilityRecords = await ctx.db
     .query("availabilityRecords")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(CASCADE_BATCH_SIZE + 1);
   const allowedTimeRanges = await ctx.db
     .query("allowedTimeRanges")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(CASCADE_BATCH_SIZE + 1);
   const notifications = await ctx.db
     .query("notificationOutbox")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(CASCADE_BATCH_SIZE + 1);
   const auditEvents = await ctx.db
     .query("auditEvents")
     .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
-    .collect();
+    .take(CASCADE_BATCH_SIZE + 1);
   const accessTokens = [];
-  for (const membership of memberships) {
+  for (const membership of memberships.slice(0, CASCADE_BATCH_SIZE)) {
+    if (accessTokens.length > CASCADE_BATCH_SIZE) {
+      break;
+    }
     accessTokens.push(
       ...(await ctx.db
         .query("membershipAccessTokens")
         .withIndex("by_membership", (q) => q.eq("membershipId", membership._id))
-        .collect()),
+        .take(CASCADE_BATCH_SIZE + 1 - accessTokens.length)),
     );
   }
+
+  const childCascadeComplete = [
+    availabilityRecords,
+    allowedTimeRanges,
+    notifications,
+    auditEvents,
+    accessTokens,
+  ].every((rows) => rows.length <= CASCADE_BATCH_SIZE);
 
   summary.anonymousMeetings += 1;
   summary.cascadedAvailabilityRecords += availabilityRecords.length;
@@ -264,25 +279,31 @@ async function countOrDeleteAnonymousMeeting(
     return;
   }
 
-  for (const record of availabilityRecords) {
+  for (const record of availabilityRecords.slice(0, CASCADE_BATCH_SIZE)) {
     await ctx.db.delete(record._id);
   }
-  for (const range of allowedTimeRanges) {
+  for (const range of allowedTimeRanges.slice(0, CASCADE_BATCH_SIZE)) {
     await ctx.db.delete(range._id);
   }
-  for (const token of accessTokens) {
+  for (const token of accessTokens.slice(0, CASCADE_BATCH_SIZE)) {
     if (membershipIds.has(token.membershipId)) {
       await ctx.db.delete(token._id);
     }
   }
-  for (const notification of notifications) {
+  for (const notification of notifications.slice(0, CASCADE_BATCH_SIZE)) {
     await ctx.db.delete(notification._id);
   }
-  for (const event of auditEvents) {
+  for (const event of auditEvents.slice(0, CASCADE_BATCH_SIZE)) {
     await ctx.db.delete(event._id);
   }
-  for (const membership of memberships) {
+  if (!childCascadeComplete) {
+    return;
+  }
+  for (const membership of memberships.slice(0, CASCADE_BATCH_SIZE)) {
     await ctx.db.delete(membership._id);
+  }
+  if (memberships.length > CASCADE_BATCH_SIZE) {
+    return;
   }
   await ctx.db.delete(meeting._id);
 }
@@ -291,6 +312,7 @@ async function assertInternalIdentitySecret(providedSecret: string): Promise<voi
   const expectedSecret = process.env[INTERNAL_IDENTITY_SECRET_ENV];
   if (
     !expectedSecret ||
+    expectedSecret.length < 32 ||
     !(await constantTimeEqualString(providedSecret, expectedSecret))
   ) {
     throw new Error("Internal maintenance authorization failed");

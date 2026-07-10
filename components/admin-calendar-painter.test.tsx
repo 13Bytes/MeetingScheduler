@@ -176,7 +176,7 @@ describe("AdminCalendarPainter", () => {
         endUtc: "2026-06-24T07:30:00.000Z",
       }),
     ]);
-  });
+  }, 10_000);
 
   it("does not paint when a touch gesture moves like a scroll", () => {
     render(

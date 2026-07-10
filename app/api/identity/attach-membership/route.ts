@@ -15,6 +15,7 @@ import {
   rateLimitErrorResponse,
 } from "@/lib/rate-limit";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readBoundedJsonObject } from "@/lib/request-json";
 
 export async function POST(request: NextRequest) {
   const session = verifyEmailIdentitySession(
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { membershipToken?: string };
+    const body = await readBoundedJsonObject<{ membershipToken?: string }>(request);
     if (!body.membershipToken) {
       return NextResponse.json(
         { error: "Membership token is required." },

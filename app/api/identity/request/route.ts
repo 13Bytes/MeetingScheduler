@@ -13,6 +13,7 @@ import {
   rateLimitErrorResponse,
 } from "@/lib/rate-limit";
 import { safeErrorMessage } from "@/lib/security-redaction";
+import { readBoundedJsonObject } from "@/lib/request-json";
 
 export async function POST(request: Request) {
   try {
@@ -23,10 +24,10 @@ export async function POST(request: Request) {
       limit: 10,
       windowMs: 10 * 60 * 1000,
     });
-    const body = (await request.json()) as {
+    const body = await readBoundedJsonObject<{
       email?: string;
       displayName?: string;
-    };
+    }>(request);
     if (!body.email) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }

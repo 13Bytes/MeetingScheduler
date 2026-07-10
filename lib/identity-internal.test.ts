@@ -5,10 +5,17 @@ describe("internal identity configuration", () => {
   it("uses configured internal secrets and rejects missing production secrets", () => {
     expect(
       getInternalIdentitySecret({
-        MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET: "shared-secret",
+        MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET:
+          "shared-secret-with-at-least-32-characters",
         NODE_ENV: "production",
       }),
-    ).toBe("shared-secret");
+    ).toBe("shared-secret-with-at-least-32-characters");
+    expect(() =>
+      getInternalIdentitySecret({
+        MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET: "too-short",
+        NODE_ENV: "production",
+      }),
+    ).toThrow(/at least 32 characters/u);
     expect(() => getInternalIdentitySecret({ NODE_ENV: "production" })).toThrow(
       /required/i,
     );
