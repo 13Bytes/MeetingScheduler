@@ -99,6 +99,25 @@ describe("allowed time presets", () => {
     ).toThrow(/does not exist/u);
   });
 
+  it("supports choosing individual days for a custom range", () => {
+    const ranges = buildCustomDailyRanges(
+      {
+        fromDate: "2026-06-29",
+        toDate: "2026-07-05",
+        startTime: "13:00",
+        endTime: "14:00",
+        weekdays: [1, 3, 6],
+      },
+      "UTC",
+    );
+
+    expect(ranges.map((range) => range.startUtc)).toEqual([
+      "2026-06-29T13:00:00.000Z",
+      "2026-07-01T13:00:00.000Z",
+      "2026-07-04T13:00:00.000Z",
+    ]);
+  });
+
   it("bounds custom ranges to keep later calendar grids manageable", () => {
     expect(
       buildCustomDailyRanges(
