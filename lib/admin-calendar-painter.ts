@@ -17,6 +17,8 @@ export type CalendarGridInput = {
   baseDate?: Date;
   minDays?: number;
   maxDays?: number;
+  visibleFromDate?: string;
+  visibleToDate?: string;
 };
 
 export type CalendarGridDay = {
@@ -75,6 +77,8 @@ export function buildCalendarGrid({
   baseDate = new Date(),
   minDays = 14,
   maxDays,
+  visibleFromDate,
+  visibleToDate,
 }: CalendarGridInput): CalendarGrid {
   assertGridSettings(granularityMinutes, durationMinutes);
   const today = getDateKeyInTimeZone(baseDate, timeZone);
@@ -82,12 +86,28 @@ export function buildCalendarGrid({
     getDateKeyInTimeZone(new Date(range.startUtc), timeZone),
     getDateKeyInTimeZone(new Date(Date.parse(range.endUtc) - 1), timeZone),
   ]);
-  const firstDate = minDateKey([today, ...rangeDateKeys]);
-  const lastRangeDate = maxDateKey([today, ...rangeDateKeys]);
+  if ((visibleFromDate === undefined) !== (visibleToDate === undefined)) {
+    throw new Error("Calendar visibility requires both a from and to date");
+  }
+  const hasVisibleDateRange =
+    visibleFromDate !== undefined && visibleToDate !== undefined;
+  const firstDate = hasVisibleDateRange
+    ? addDaysToDateKey(visibleFromDate, 0)
+    : minDateKey([today, ...rangeDateKeys]);
+  const lastRangeDate = hasVisibleDateRange
+    ? addDaysToDateKey(visibleToDate, 0)
+    : maxDateKey([today, ...rangeDateKeys]);
   const requestedDayCount = daysBetween(firstDate, lastRangeDate) + 1;
-  const dayCount = maxDays
-    ? Math.min(Math.max(requestedDayCount, minDays), maxDays)
-    : Math.max(requestedDayCount, minDays);
+  if (requestedDayCount < 1) {
+    throw new Error("Calendar to date must be on or after its from date");
+  }
+  const dayCount = hasVisibleDateRange
+    ? maxDays
+      ? Math.min(requestedDayCount, maxDays)
+      : requestedDayCount
+    : maxDays
+      ? Math.min(Math.max(requestedDayCount, minDays), maxDays)
+      : Math.max(requestedDayCount, minDays);
   const days = Array.from({ length: dayCount }, (_, dayOffset) => {
     const dateKey = addDaysToDateKey(firstDate, dayOffset);
     const date = zonedWallTimeToUtc(dateKey, "12:00", timeZone);

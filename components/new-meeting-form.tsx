@@ -2,16 +2,28 @@
 
 import {
   AlertTriangle,
+  CalendarDays,
   CalendarClock,
+  Eraser,
   Loader2,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useReducer, useState } from "react";
 import type { AllowedTimeRangeDraft, AllowedTimePresetId } from "@/lib/meeting-presets";
 import { buildAllowedTimeRanges } from "@/lib/meeting-presets";
+import {
+  allowedCellKeysToRangesForSave,
+  buildCalendarGrid,
+  createInitialPaintState,
+  paintReducer,
+  rangesToAllowedCellKeys,
+  validatePaintedRanges,
+  type PaintMode,
+} from "@/lib/admin-calendar-painter";
 import { buildCreatedMeetingLinks } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { BrushControls, CalendarPaintGrid } from "@/components/calendar-paint-grid";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -62,7 +74,9 @@ export function NewMeetingForm({
   const [customToDate, setCustomToDate] = useState(getDefaultCustomToDate);
   const [customStartTime, setCustomStartTime] = useState("09:00");
   const [customEndTime, setCustomEndTime] = useState("17:00");
-  const [customIncludeWeekends, setCustomIncludeWeekends] = useState(false);
+  const [customWeekdays, setCustomWeekdays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [useConstraintCalendar, setUseConstraintCalendar] = useState(false);
+  const [paintMode, setPaintMode] = useState<PaintMode>("allow");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,7 +90,7 @@ export function NewMeetingForm({
         customToDate,
         customStartTime,
         customEndTime,
-        customIncludeWeekends,
+        customWeekdays,
       });
     } catch {
       return [];
@@ -88,8 +102,80 @@ export function NewMeetingForm({
     customToDate,
     customStartTime,
     customEndTime,
-    customIncludeWeekends,
+    customWeekdays,
   ]);
+  const duration = Number(durationMinutes);
+  const granularity = Number(granularityMinutes);
+  const calendarDuration =
+    Number.isInteger(duration) &&
+    Number.isInteger(granularity) &&
+    duration > 0 &&
+    granularity > 0 &&
+    duration % granularity === 0
+      ? duration
+      : 30;
+  const calendarGranularity =
+    Number.isInteger(granularity) && granularity > 0 ? granularity : 30;
+  const calendarDateRange = useMemo(
+    () => getCustomCalendarDateRange(presetId, customFromDate, customToDate),
+    [customFromDate, customToDate, presetId],
+  );
+  const calendarGrid = useMemo(
+    () =>
+      buildCalendarGrid({
+        timeZone,
+        granularityMinutes: calendarGranularity,
+        durationMinutes: calendarDuration,
+        allowedTimeRanges: previewRanges,
+        ...(calendarDateRange ?? {}),
+      }),
+    [calendarDateRange, calendarDuration, calendarGranularity, previewRanges, timeZone],
+  );
+  const initialAllowedCellKeys = useMemo(
+    () => rangesToAllowedCellKeys(calendarGrid, previewRanges),
+    [calendarGrid, previewRanges],
+  );
+  const [paintState, dispatchPaint] = useReducer(
+    paintReducer,
+    initialAllowedCellKeys,
+    createInitialPaintState,
+  );
+  const calendarSourceKey = useMemo(
+    () =>
+      JSON.stringify({
+        timeZone,
+        duration: calendarDuration,
+        granularity: calendarGranularity,
+        visibleDateRange: calendarDateRange,
+        ranges: previewRanges,
+      }),
+    [calendarDateRange, calendarDuration, calendarGranularity, previewRanges, timeZone],
+  );
+  const [paintSourceKey, markPaintSourceKey] = useReducer(
+    (_current: string, next: string) => next,
+    calendarSourceKey,
+  );
+  const displayedPaintState =
+    paintSourceKey === calendarSourceKey
+      ? paintState
+      : createInitialPaintState(initialAllowedCellKeys);
+  useEffect(() => {
+    dispatchPaint({ type: "replace", allowedCellKeys: initialAllowedCellKeys });
+    markPaintSourceKey(calendarSourceKey);
+  }, [calendarSourceKey, initialAllowedCellKeys]);
+  const calendarRanges = useMemo(
+    () =>
+      allowedCellKeysToRangesForSave(
+        calendarGrid,
+        displayedPaintState.allowedCellKeys,
+        previewRanges,
+      ),
+    [calendarGrid, displayedPaintState.allowedCellKeys, previewRanges],
+  );
+  const calendarValidation = useMemo(
+    () => validatePaintedRanges(calendarRanges, calendarDuration),
+    [calendarDuration, calendarRanges],
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,8 +186,6 @@ export function NewMeetingForm({
       return;
     }
 
-    const duration = Number(durationMinutes);
-    const granularity = Number(granularityMinutes);
     if (!title.trim()) {
       setError("Add a meeting title before creating the poll.");
       return;
@@ -117,15 +201,22 @@ export function NewMeetingForm({
 
     let allowedTimeRanges: AllowedTimeRangeDraft[];
     try {
-      allowedTimeRanges = buildSelectedRanges({
-        presetId,
-        timeZone,
-        customFromDate,
-        customToDate,
-        customStartTime,
-        customEndTime,
-        customIncludeWeekends,
-      });
+      allowedTimeRanges = useConstraintCalendar
+        ? calendarRanges
+        : buildSelectedRanges({
+            presetId,
+            timeZone,
+            customFromDate,
+            customToDate,
+            customStartTime,
+            customEndTime,
+            customWeekdays,
+          });
+      if (useConstraintCalendar && !calendarValidation.isValid) {
+        throw new Error(
+          calendarValidation.message ?? "Paint at least one valid allowed region.",
+        );
+      }
       validateAllowedTimeRanges(allowedTimeRanges, duration, granularity);
     } catch (caughtError) {
       setError(
@@ -393,27 +484,132 @@ export function NewMeetingForm({
                     onChange={(event) => setCustomEndTime(event.target.value)}
                   />
                 </label>
-                <label className="flex items-center gap-3 md:col-span-2">
-                  <input
-                    type="checkbox"
-                    className="size-4 shrink-0 accent-primary"
-                    checked={customIncludeWeekends}
-                    onChange={(event) => setCustomIncludeWeekends(event.target.checked)}
-                  />
-                  <span className="text-sm font-medium text-foreground">
-                    Include weekends
+                <fieldset className="grid gap-2 md:col-span-2">
+                  <legend className="text-sm font-medium text-foreground">Days</legend>
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                    {weekdayOptions.map((day) => (
+                      <label
+                        key={day.value}
+                        className={cn(
+                          "flex cursor-pointer items-center justify-center rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                          customWeekdays.includes(day.value)
+                            ? "border-primary bg-blue-50 text-blue-900"
+                            : "border-border bg-surface text-slate-600 hover:bg-surface-muted",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={customWeekdays.includes(day.value)}
+                          onChange={() =>
+                            setCustomWeekdays((current) =>
+                              current.includes(day.value)
+                                ? current.filter((value) => value !== day.value)
+                                : [...current, day.value],
+                            )
+                          }
+                        />
+                        {day.label}
+                      </label>
+                    ))}
+                  </div>
+                  <span className="text-xs leading-5 text-slate-500">
+                    Choose any combination of weekdays and weekends.
                   </span>
-                </label>
+                </fieldset>
               </div>
             ) : null}
 
-            <div className="rounded-md border border-border bg-surface-muted p-4 text-sm text-slate-600">
-              {previewRanges.length > 0
-                ? `${previewRanges.length} broad allowed range${
-                    previewRanges.length === 1 ? "" : "s"
-                  } will be stored in ${timeZone}.`
-                : "Adjust the allowed-time settings to preview generated ranges."}
-            </div>
+            <label className="flex items-start gap-3 rounded-md border border-border bg-surface p-4">
+              <input
+                type="checkbox"
+                className="mt-1 size-4 shrink-0 accent-primary"
+                checked={useConstraintCalendar}
+                onChange={(event) => setUseConstraintCalendar(event.target.checked)}
+                aria-controls="creation-constraint-calendar"
+              />
+              <span className="grid gap-1">
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+                  Choose exact times in the Constraint Calendar
+                </span>
+                <span className="text-sm leading-6 text-slate-600">
+                  Optional. Start with the preset above, then paint individual time slots.
+                </span>
+              </span>
+            </label>
+
+            {useConstraintCalendar ? (
+              <div
+                id="creation-constraint-calendar"
+                className="overflow-hidden rounded-md border border-border bg-surface"
+              >
+                <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="font-medium text-foreground">Constraint Calendar</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Blue fields are allowed. Drag or use the keyboard to edit them.
+                    </p>
+                  </div>
+                  <BrushControls
+                    mode={paintMode}
+                    disabled={false}
+                    onModeChange={setPaintMode}
+                  />
+                </div>
+                <CalendarPaintGrid
+                  grid={calendarGrid}
+                  mode={paintMode}
+                  disabled={false}
+                  allowedCellKeys={displayedPaintState.allowedCellKeys}
+                  previewCellKeys={displayedPaintState.previewCellKeys}
+                  ariaLabel="Creation allowed time calendar"
+                  onBegin={(cellKey) =>
+                    dispatchPaint({ type: "begin", cellKey, mode: paintMode })
+                  }
+                  onHover={(cellKey) =>
+                    dispatchPaint({ type: "hover", cellKey, grid: calendarGrid })
+                  }
+                  onCommit={() => dispatchPaint({ type: "commit" })}
+                  onCancel={() => dispatchPaint({ type: "cancel" })}
+                  onApplyCell={(cellKey) => {
+                    if (paintMode === "preview") {
+                      dispatchPaint({ type: "begin", cellKey, mode: paintMode });
+                      return;
+                    }
+                    dispatchPaint({
+                      type: "applyPreset",
+                      cellKeys: [cellKey],
+                      mode: paintMode,
+                    });
+                  }}
+                />
+                <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    className={cn(
+                      "text-sm",
+                      calendarValidation.isValid ? "text-slate-600" : "text-warning",
+                    )}
+                  >
+                    {calendarValidation.isValid
+                      ? `${calendarRanges.length} exact allowed range${
+                          calendarRanges.length === 1 ? "" : "s"
+                        } will be used.`
+                      : calendarValidation.message}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      dispatchPaint({ type: "replace", allowedCellKeys: [] })
+                    }
+                  >
+                    <Eraser className="size-4" aria-hidden="true" />
+                    Clear all
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -458,7 +654,7 @@ function buildSelectedRanges({
   customToDate,
   customStartTime,
   customEndTime,
-  customIncludeWeekends,
+  customWeekdays,
 }: {
   presetId: AllowedTimePresetId;
   timeZone: string;
@@ -466,7 +662,7 @@ function buildSelectedRanges({
   customToDate: string;
   customStartTime: string;
   customEndTime: string;
-  customIncludeWeekends: boolean;
+  customWeekdays: number[];
 }) {
   return buildAllowedTimeRanges({
     presetId,
@@ -478,7 +674,7 @@ function buildSelectedRanges({
             toDate: customToDate,
             startTime: customStartTime,
             endTime: customEndTime,
-            includeWeekends: customIncludeWeekends,
+            weekdays: customWeekdays,
           }
         : undefined,
   });
@@ -486,6 +682,32 @@ function buildSelectedRanges({
 
 function getDefaultTimeZone() {
   return normalizeTimeZoneId(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+}
+
+function getCustomCalendarDateRange(
+  presetId: AllowedTimePresetId,
+  fromDate: string,
+  toDate: string,
+) {
+  if (presetId !== "custom-daily-range") {
+    return null;
+  }
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/u;
+  if (!datePattern.test(fromDate) || !datePattern.test(toDate)) {
+    return null;
+  }
+  const fromTimestamp = Date.parse(`${fromDate}T00:00:00.000Z`);
+  const toTimestamp = Date.parse(`${toDate}T00:00:00.000Z`);
+  if (
+    !Number.isFinite(fromTimestamp) ||
+    !Number.isFinite(toTimestamp) ||
+    new Date(fromTimestamp).toISOString().slice(0, 10) !== fromDate ||
+    new Date(toTimestamp).toISOString().slice(0, 10) !== toDate ||
+    toTimestamp < fromTimestamp
+  ) {
+    return null;
+  }
+  return { visibleFromDate: fromDate, visibleToDate: toDate };
 }
 
 function getDefaultCustomFromDate() {
@@ -583,6 +805,16 @@ const timeZoneAliases: Record<string, string> = {
   "Pacific/Truk": "Pacific/Chuuk",
 };
 
+const weekdayOptions = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+] as const;
+
 const presetOptions: {
   id: AllowedTimePresetId;
   label: string;
@@ -601,7 +833,7 @@ const presetOptions: {
   {
     id: "custom-daily-range",
     label: "Custom range",
-    description: "Pick dates, daily start and end times.",
+    description: "Pick dates, days of the week, and daily hours.",
   },
 ];
 
