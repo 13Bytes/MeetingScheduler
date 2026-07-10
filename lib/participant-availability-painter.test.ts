@@ -105,6 +105,25 @@ describe("participant paint reducer", () => {
 
     expect(state.previewCellKeys).toEqual(grid.participantCellKeys);
   });
+
+  it("paints a range after its start and end cells are tapped separately", () => {
+    const grid = buildGrid();
+    const nine = grid.cellsByDateTime.get("2026-06-25_09:00")!;
+    const tenThirty = grid.cellsByDateTime.get("2026-06-25_10:30")!;
+    let state = createInitialAvailabilityPaintState();
+
+    state = availabilityPaintReducer(state, {
+      type: "applyRange",
+      anchorCellKey: nine.key,
+      targetCellKey: tenThirty.key,
+      grid,
+      mode: "yes",
+    });
+
+    expect(state.responsesByCellKey).toEqual(
+      new Map(Array.from(grid.participantCellKeys, (cellKey) => [cellKey, "yes"])),
+    );
+  });
 });
 
 describe("participant availability conversion", () => {

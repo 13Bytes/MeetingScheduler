@@ -409,6 +409,8 @@ export function ParticipantAvailabilityPainter({
 }) {
   const { meeting } = data;
   const [mode, setMode] = useState<ParticipantPaintMode>("yes");
+  const [rangeAnchorCellKey, setRangeAnchorCellKey] = useState<string | null>(null);
+  const [isRangeSelectionActive, setIsRangeSelectionActive] = useState(false);
   const [displayName, setDisplayName] = useState(data.membership?.displayName ?? "");
   const [createdMembershipToken, setCreatedMembershipToken] = useState<string | null>(
     null,
@@ -652,11 +654,10 @@ export function ParticipantAvailabilityPainter({
             </h1>
             <div>
               {meeting.lifecycleState === "finalized" ? (
-                <Badge >Participant response Finalized</Badge>
+                <Badge>Participant response Finalized</Badge>
               ) : (
                 <Badge variant="accent">Participant response Open</Badge>
               )}
-
             </div>
           </div>
           {meeting.description ? (
@@ -706,6 +707,8 @@ export function ParticipantAvailabilityPainter({
               disabled={!canEdit}
               responsesByCellKey={paintState.responsesByCellKey}
               previewCellKeys={paintState.previewCellKeys}
+              rangeAnchorCellKey={rangeAnchorCellKey}
+              isRangeSelectionActive={isRangeSelectionActive}
               onBegin={(cellKey) => {
                 setError(null);
                 setNotice(null);
@@ -720,6 +723,29 @@ export function ParticipantAvailabilityPainter({
                 setNotice(null);
                 setHasLocalEdits(true);
                 dispatch({ type: "apply", cellKeys: [cellKey], mode });
+              }}
+              onRangeCell={(cellKey) => {
+                setError(null);
+                setNotice(null);
+                if (!rangeAnchorCellKey) {
+                  setRangeAnchorCellKey(cellKey);
+                  return;
+                }
+                setHasLocalEdits(true);
+                dispatch({
+                  type: "applyRange",
+                  anchorCellKey: rangeAnchorCellKey,
+                  targetCellKey: cellKey,
+                  grid,
+                  mode,
+                });
+                setRangeAnchorCellKey(null);
+                setIsRangeSelectionActive(false);
+              }}
+              onRangeStart={() => setIsRangeSelectionActive(true)}
+              onRangeCancel={() => {
+                setRangeAnchorCellKey(null);
+                setIsRangeSelectionActive(false);
               }}
             />
           </CardContent>
@@ -914,12 +940,7 @@ function MeetingLinksPanel({
         setIsPreparingAdminInvite(false);
       }
     },
-    [
-      canShareAdminInvite,
-      meetingSlug,
-      membershipToken,
-      onCreateAdminInviteToken,
-    ],
+    [canShareAdminInvite, meetingSlug, membershipToken, onCreateAdminInviteToken],
   );
 
   useEffect(() => {
@@ -936,7 +957,12 @@ function MeetingLinksPanel({
     }
 
     void prepareAdminInvite();
-  }, [canShareAdminInvite, membershipToken, onCreateAdminInviteToken, prepareAdminInvite]);
+  }, [
+    canShareAdminInvite,
+    membershipToken,
+    onCreateAdminInviteToken,
+    prepareAdminInvite,
+  ]);
 
   const adminInviteUrl =
     adminInvite?.membershipToken === membershipToken ? adminInvite.url : null;
@@ -1070,24 +1096,34 @@ function AvailabilityGrid({
   disabled,
   responsesByCellKey,
   previewCellKeys,
+  rangeAnchorCellKey,
+  isRangeSelectionActive,
   onBegin,
   onHover,
   onCommit,
   onCommittedEdit,
   onCancel,
   onApplyCell,
+  onRangeCell,
+  onRangeStart,
+  onRangeCancel,
 }: {
   grid: ParticipantAvailabilityGrid;
   mode: ParticipantPaintMode;
   disabled: boolean;
   responsesByCellKey: Map<string, AvailabilityResponse>;
   previewCellKeys: Set<string>;
+  rangeAnchorCellKey: string | null;
+  isRangeSelectionActive: boolean;
   onBegin: (cellKey: string) => void;
   onHover: (cellKey: string) => void;
   onCommit: () => void;
   onCommittedEdit: () => void;
   onCancel: () => void;
   onApplyCell: (cellKey: string) => void;
+  onRangeCell: (cellKey: string) => void;
+  onRangeStart: () => void;
+  onRangeCancel: () => void;
 }) {
   const visibleDays = grid.days.filter((day) =>
     grid.timeKeys.some((timeKey) => {
@@ -1112,54 +1148,89 @@ function AvailabilityGrid({
 
   const columnTemplate = `76px repeat(${visibleDays.length}, minmax(72px, 1fr))`;
   return (
-    <div
-      className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
-      onPointerLeave={() => {
-        if (!disabled) {
-          onCancel();
-        }
-      }}
-    >
-      <div
-        className="grid min-w-[640px] sm:min-w-[720px]"
-        style={{ gridTemplateColumns: columnTemplate }}
-        role="grid"
-        aria-label="Participant availability calendar"
-      >
-        <div className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600">
-          Time
-        </div>
-        {visibleDays.map((day) => (
-          <div
-            key={day.dateKey}
-            className={cn(
-              "sticky top-0 z-10 border-b border-r border-border bg-surface-muted px-2 py-2 text-center text-xs font-medium text-slate-700",
-              day.isWeekend && "bg-slate-100 text-slate-500",
-            )}
-          >
-            <span className="block">{day.weekdayLabel}</span>
-            <span className="block font-normal">{day.dateKey.slice(5)}</span>
+    <>
+      <div className="border-b border-border bg-surface-muted px-4 py-3 text-sm text-slate-600 sm:hidden">
+        {rangeAnchorCellKey ? (
+          <div className="flex items-center justify-between gap-3">
+            <span>Range start selected. Scroll, then tap the end cell.</span>
+            <Button type="button" variant="ghost" size="sm" onClick={onRangeCancel}>
+              Cancel
+            </Button>
           </div>
-        ))}
-        {visibleTimeKeys.map((timeKey) => (
-          <AvailabilityRow
-            key={timeKey}
-            grid={grid}
-            visibleDays={visibleDays}
-            timeKey={timeKey}
-            mode={mode}
-            disabled={disabled}
-            responsesByCellKey={responsesByCellKey}
-            previewCellKeys={previewCellKeys}
-            onBegin={onBegin}
-            onHover={onHover}
-            onCommit={onCommit}
-            onCommittedEdit={onCommittedEdit}
-            onApplyCell={onApplyCell}
-          />
-        ))}
+        ) : isRangeSelectionActive ? (
+          <div className="flex items-center justify-between gap-3">
+            <span>Tap the first cell in the range.</span>
+            <Button type="button" variant="ghost" size="sm" onClick={onRangeCancel}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <span>Tap a cell to mark it.</span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={disabled}
+              onClick={onRangeStart}
+            >
+              Mark a range
+            </Button>
+          </div>
+        )}
       </div>
-    </div>
+      <div
+        className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
+        onPointerLeave={() => {
+          if (!disabled) {
+            onCancel();
+          }
+        }}
+      >
+        <div
+          className="grid min-w-[640px] sm:min-w-[720px]"
+          style={{ gridTemplateColumns: columnTemplate }}
+          role="grid"
+          aria-label="Participant availability calendar"
+        >
+          <div className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600">
+            Time
+          </div>
+          {visibleDays.map((day) => (
+            <div
+              key={day.dateKey}
+              className={cn(
+                "sticky top-0 z-10 border-b border-r border-border bg-surface-muted px-2 py-2 text-center text-xs font-medium text-slate-700",
+                day.isWeekend && "bg-slate-100 text-slate-500",
+              )}
+            >
+              <span className="block">{day.weekdayLabel}</span>
+              <span className="block font-normal">{day.dateKey.slice(5)}</span>
+            </div>
+          ))}
+          {visibleTimeKeys.map((timeKey) => (
+            <AvailabilityRow
+              key={timeKey}
+              grid={grid}
+              visibleDays={visibleDays}
+              timeKey={timeKey}
+              mode={mode}
+              disabled={disabled}
+              responsesByCellKey={responsesByCellKey}
+              previewCellKeys={previewCellKeys}
+              onBegin={onBegin}
+              onHover={onHover}
+              onCommit={onCommit}
+              onCommittedEdit={onCommittedEdit}
+              onApplyCell={onApplyCell}
+              onRangeCell={onRangeCell}
+              rangeAnchorCellKey={rangeAnchorCellKey}
+              isRangeSelectionActive={isRangeSelectionActive}
+            />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1176,6 +1247,9 @@ function AvailabilityRow({
   onCommit,
   onCommittedEdit,
   onApplyCell,
+  onRangeCell,
+  rangeAnchorCellKey,
+  isRangeSelectionActive,
 }: {
   grid: ParticipantAvailabilityGrid;
   visibleDays: ParticipantAvailabilityGrid["days"];
@@ -1189,6 +1263,9 @@ function AvailabilityRow({
   onCommit: () => void;
   onCommittedEdit: () => void;
   onApplyCell: (cellKey: string) => void;
+  onRangeCell: (cellKey: string) => void;
+  rangeAnchorCellKey: string | null;
+  isRangeSelectionActive: boolean;
 }) {
   return (
     <>
@@ -1220,6 +1297,9 @@ function AvailabilityRow({
             onCommit={onCommit}
             onCommittedEdit={onCommittedEdit}
             onApplyCell={onApplyCell}
+            onRangeCell={onRangeCell}
+            isRangeStart={rangeAnchorCellKey === cell.key}
+            isRangeSelectionActive={isRangeSelectionActive}
           />
         );
       })}
@@ -1238,6 +1318,9 @@ function AvailabilityCellButton({
   onCommit,
   onCommittedEdit,
   onApplyCell,
+  onRangeCell,
+  isRangeStart,
+  isRangeSelectionActive,
 }: {
   cell: { key: string; dayLabel: string; timeLabel: string; isWeekend: boolean };
   mode: ParticipantPaintMode;
@@ -1249,6 +1332,9 @@ function AvailabilityCellButton({
   onCommit: () => void;
   onCommittedEdit: () => void;
   onApplyCell: (cellKey: string) => void;
+  onRangeCell: (cellKey: string) => void;
+  isRangeStart: boolean;
+  isRangeSelectionActive: boolean;
 }) {
   const displayedResponse = isPreview && mode !== "clear" ? mode : response;
   const touchStartRef = useRef<{
@@ -1271,6 +1357,7 @@ function AvailabilityCellButton({
         responseClassName(displayedResponse),
         !displayedResponse && cell.isWeekend && "bg-slate-50",
         isPreview && mode === "clear" && "bg-slate-200",
+        isRangeStart && "ring-2 ring-inset ring-primary",
       )}
       onPointerDown={(event) => {
         if (disabled) {
@@ -1316,7 +1403,11 @@ function AvailabilityCellButton({
         const touchStart = touchStartRef.current;
         if (touchStart) {
           if (!touchStart.moved) {
-            onApplyCell(cell.key);
+            if (isRangeSelectionActive) {
+              onRangeCell(cell.key);
+            } else {
+              onApplyCell(cell.key);
+            }
           }
           touchStartRef.current = null;
           return;
@@ -1329,7 +1420,11 @@ function AvailabilityCellButton({
           return;
         }
         event.preventDefault();
-        onApplyCell(cell.key);
+        if (isRangeSelectionActive) {
+          onRangeCell(cell.key);
+        } else {
+          onApplyCell(cell.key);
+        }
       }}
     />
   );
@@ -1355,11 +1450,11 @@ function AvailabilityBrushControls({
     label: string;
     icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   }[] = [
-      { mode: "yes", label: "Yes", icon: Paintbrush },
-      { mode: "reluctant", label: "Reluctant", icon: Smile },
-      { mode: "no", label: "No", icon: ThumbsDown },
-      { mode: "clear", label: "Clear", icon: Eraser },
-    ];
+    { mode: "yes", label: "Yes", icon: Paintbrush },
+    { mode: "reluctant", label: "Reluctant", icon: Smile },
+    { mode: "no", label: "No", icon: ThumbsDown },
+    { mode: "clear", label: "Clear", icon: Eraser },
+  ];
 
   return (
     <div className="flex w-full flex-wrap rounded-md border border-border bg-surface p-1 sm:w-auto">

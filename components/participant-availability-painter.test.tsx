@@ -276,10 +276,9 @@ describe("ParticipantAvailabilityPainter", () => {
 
     render(<ConnectedPublicParticipantMeeting meetingSlug="team-planning" />);
 
-    expect(useQueryMock).toHaveBeenCalledWith(
-      expect.anything(),
-      { membershipToken: "remembered-member-token" },
-    );
+    expect(useQueryMock).toHaveBeenCalledWith(expect.anything(), {
+      membershipToken: "remembered-member-token",
+    });
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
   });
@@ -471,6 +470,32 @@ describe("ParticipantAvailabilityPainter", () => {
       "member-secret-token",
       "team-planning",
     );
+  });
+
+  it("lets a mobile user mark a range with separate start and end taps", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={baseData}
+        onCreateMembership={vi.fn()}
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /mark a range/i }));
+    fireEvent.keyDown(screen.getByRole("gridcell", { name: /thu jun 25 09:00 unset/i }), {
+      key: "Enter",
+    });
+    fireEvent.keyDown(screen.getByRole("gridcell", { name: /thu jun 25 09:30 unset/i }), {
+      key: "Enter",
+    });
+
+    expect(
+      screen.getByRole("gridcell", { name: /thu jun 25 09:00 yes/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("gridcell", { name: /thu jun 25 09:30 yes/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows a joined notice when saving a public membership without painted cells", async () => {
