@@ -18,7 +18,10 @@ export type CustomDailyRangeInput = {
   toDate: string;
   startTime: string;
   endTime: string;
-  includeWeekends: boolean;
+  /** Days use JavaScript's convention: Sunday = 0, Monday = 1, ... Saturday = 6. */
+  weekdays?: number[];
+  /** Backwards-compatible shorthand used when weekdays is not provided. */
+  includeWeekends?: boolean;
 };
 
 export type BuildAllowedTimeRangesInput = {
@@ -78,6 +81,7 @@ export function buildCustomDailyRanges(
   const toDate = parseDateKey(customRange.toDate, "toDate");
   const startTime = parseTimeKey(customRange.startTime, "startTime");
   const endTime = parseTimeKey(customRange.endTime, "endTime");
+  const weekdays = normalizeWeekdays(customRange.weekdays);
 
   if (dateKeyToUtcMs(toDate) < dateKeyToUtcMs(fromDate)) {
     throw new Error("Custom range end date must be on or after the start date");
@@ -91,13 +95,17 @@ export function buildCustomDailyRanges(
   if (dayCount > MAX_CUSTOM_RANGE_DAYS) {
     throw new Error(`Custom range cannot exceed ${MAX_CUSTOM_RANGE_DAYS} days`);
   }
+  if (weekdays?.length === 0) {
+    throw new Error("Select at least one day of the week");
+  }
 
   return buildDailyRanges({
     fromDate,
     dayCount,
     startTime,
     endTime,
-    includeWeekends: customRange.includeWeekends,
+    includeWeekends: customRange.includeWeekends ?? false,
+    weekdays,
     timeZone,
     labelPrefix: "Custom",
   });
@@ -109,6 +117,7 @@ function buildDailyRanges({
   startTime,
   endTime,
   includeWeekends,
+  weekdays,
   timeZone,
   labelPrefix,
 }: {
@@ -117,13 +126,18 @@ function buildDailyRanges({
   startTime: string;
   endTime: string;
   includeWeekends: boolean;
+  weekdays?: number[];
   timeZone: string;
   labelPrefix: string;
 }) {
   const ranges: AllowedTimeRangeDraft[] = [];
   for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
     const date = addDaysToDateKey(fromDate, dayOffset);
-    if (!includeWeekends && isWeekend(date)) {
+    const weekday = new Date(dateKeyToUtcMs(date)).getUTCDay();
+    if (
+      (weekdays && !weekdays.includes(weekday)) ||
+      (!weekdays && !includeWeekends && isWeekend(date))
+    ) {
       continue;
     }
 
@@ -141,6 +155,18 @@ function buildDailyRanges({
     throw new Error("Allowed time preset produced no ranges");
   }
   return ranges;
+}
+
+function normalizeWeekdays(weekdays: number[] | undefined): number[] | undefined {
+  if (weekdays === undefined) {
+    return undefined;
+  }
+  if (
+    weekdays.some((weekday) => !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
+  ) {
+    throw new Error("Weekdays must be numbers from 0 through 6");
+  }
+  return Array.from(new Set(weekdays));
 }
 
 export function zonedWallTimeToUtc(
