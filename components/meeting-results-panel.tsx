@@ -103,14 +103,14 @@ export function MeetingResultsPanel({
     setStatus(null);
     try {
       await onReopen();
-      setStatus({ tone: "success", message: "Poll reopened for edits." });
+      setStatus({ tone: "success", message: "Meeting reopened for responses." });
     } catch (caughtError) {
       setStatus({
         tone: "error",
         message:
           caughtError instanceof Error
             ? caughtError.message
-            : "Reopening the poll failed.",
+            : "Unable to reopen the meeting.",
       });
     } finally {
       setIsSubmitting(false);
@@ -137,15 +137,14 @@ export function MeetingResultsPanel({
                 <div className="space-y-2">
                   <CardTitle className="flex items-start gap-2">
                     <CalendarCheck2 className="size-5 text-primary" aria-hidden="true" />
-                    <span>Recommended Shortlist</span>
+                    <span>Best times</span>
                   </CardTitle>
                   <p className="text-sm leading-6 text-slate-600">
-                    Ranked by attendees first, then fewer reluctant cells, then earliest
-                    start.
+                    The strongest options based on everyone&apos;s availability.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {canAdminister ? <Badge variant="accent">Admin view</Badge> : null}
+                  {canAdminister ? <Badge variant="accent">Organizer</Badge> : null}
                   {!results.detailsVisible ? (
                     <Badge>
                       <EyeOff className="size-3.5" aria-hidden="true" />
@@ -157,10 +156,10 @@ export function MeetingResultsPanel({
             </CardHeader>
             <CardContent className="space-y-4 pt-5">
               {hasParticipants && !hasCandidates ? (
-                <EmptyResultsMessage message="No candidate slots fit inside the current admin-allowed ranges." />
+                <EmptyResultsMessage message="The selected time windows are too short for this meeting." />
               ) : null}
               {hasParticipants && hasCandidates && recommendedShortlist.length === 0 ? (
-                <EmptyResultsMessage message="No candidate slots have any attendees yet." />
+                <EmptyResultsMessage message="No available times match the responses yet." />
               ) : null}
               {recommendedShortlist.map((candidate) => (
                 <CandidateRow
@@ -182,7 +181,7 @@ export function MeetingResultsPanel({
         ) : shouldShowWaitingState ? (
           <Card>
             <CardHeader>
-              <CardTitle>Results Pending</CardTitle>
+              <CardTitle>Waiting for responses</CardTitle>
             </CardHeader>
             <CardContent>
               <EmptyResultsMessage message="Recommendations will appear after someone saves availability." />
@@ -196,19 +195,19 @@ export function MeetingResultsPanel({
             (canFinalize || canReopen || lifecycleState === "finalized") ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Final Selection</CardTitle>
+                  <CardTitle>Choose the final time</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {lifecycleState === "finalized" ? (
                     <p className="text-sm leading-6 text-slate-600">
-                      This poll is finalized. Results remain visible, and editing stays
-                      locked until an admin reopens it.
+                      The final time is set. An organizer can reopen responses if plans
+                      change.
                     </p>
                   ) : hasCandidates ? (
                     <>
                       <label className="grid gap-2">
                         <span className="text-sm font-medium text-foreground">
-                          Override candidate
+                          Meeting time
                         </span>
                         <select
                           className={inputClassName}
@@ -224,7 +223,6 @@ export function MeetingResultsPanel({
                               key={candidateKey(candidate)}
                               value={candidateKey(candidate)}
                             >
-                              #{candidate.rank}{" "}
                               {formatCandidateWindow(candidate, results.timeZone)} ·{" "}
                               {candidate.availableParticipantCount}/
                               {candidate.totalParticipantCount} able
@@ -255,7 +253,7 @@ export function MeetingResultsPanel({
                     </>
                   ) : (
                     <p className="text-sm leading-6 text-slate-600">
-                      Add admin-allowed ranges before finalizing a meeting time.
+                      Add available times before choosing the final meeting time.
                     </p>
                   )}
                   {status ? (
@@ -269,7 +267,7 @@ export function MeetingResultsPanel({
 
             <Card>
               <CardHeader>
-                <CardTitle>Score Heatmap</CardTitle>
+                <CardTitle>Availability comparison</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {heatmapCandidates.slice(0, 12).map((candidate) => (
@@ -281,19 +279,18 @@ export function MeetingResultsPanel({
                 ))}
                 {heatmapCandidates.length > 12 ? (
                   <p className="text-xs leading-5 text-slate-500">
-                    Showing the strongest 12 of {heatmapCandidates.length} candidate
-                    slots with at least one attendee.
+                    Showing the 12 best-matching times out of {heatmapCandidates.length}.
                   </p>
                 ) : null}
                 {hasParticipants && hasCandidates && heatmapCandidates.length === 0 ? (
                   <p className="text-sm leading-6 text-slate-600">
-                    No candidate slots have any attendees yet.
+                    No available times match the responses yet.
                   </p>
                 ) : null}
                 {hasParticipants && hasCandidates ? null : (
                   <p className="text-sm leading-6 text-slate-600">
-                    The heatmap appears once there are participants and valid candidate
-                    slots.
+                    This comparison will appear once participants share their
+                    availability.
                   </p>
                 )}
               </CardContent>
@@ -307,8 +304,7 @@ export function MeetingResultsPanel({
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-6 text-slate-600">
-                  Final selection and score heatmap will appear after someone saves
-                  availability.
+                  The best times will appear after someone shares their availability.
                 </p>
               </CardContent>
             </Card>
@@ -327,7 +323,7 @@ function VotedParticipantsCard({ results }: { results: MeetingResults }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Votes Submitted</CardTitle>
+        <CardTitle>Responses</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {canShowNames ? (
@@ -344,9 +340,7 @@ function VotedParticipantsCard({ results }: { results: MeetingResults }) {
             ))}
           </div>
         ) : results.detailsVisible ? (
-          <p className="text-sm leading-6 text-slate-600">
-            No participants have voted yet.
-          </p>
+          <p className="text-sm leading-6 text-slate-600">No one has responded yet.</p>
         ) : (
           <p className="text-xs leading-5 text-slate-500">
             Names are hidden for summary-only results.
@@ -355,7 +349,7 @@ function VotedParticipantsCard({ results }: { results: MeetingResults }) {
         <p className="text-sm leading-6 text-slate-600">
           {votedParticipantCount} of {results.totalParticipantCount}{" "}
           {results.totalParticipantCount === 1 ? "participant has" : "participants have"}{" "}
-          voted.
+          responded.
         </p>
       </CardContent>
     </Card>
@@ -388,7 +382,7 @@ function CandidateRow({
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-base font-semibold text-foreground">
-              #{candidate.rank} {formatCandidateWindow(candidate, timeZone)}
+              {formatCandidateWindow(candidate, timeZone)}
             </h3>
             {isSelected && canSelect ? <Badge variant="accent">Selected</Badge> : null}
           </div>
@@ -405,10 +399,10 @@ function CandidateRow({
           />
           <Metric
             icon={SmilePlus}
-            label="Reluctant"
+            label="If needed"
             value={candidate.reluctantVoteCount}
           />
-          <Metric label="Score" value={`${candidate.scorePercent}%`} />
+          <Metric label="Match" value={`${candidate.scorePercent}%`} />
         </div>
       </div>
       {canSelect ? (
@@ -435,7 +429,7 @@ function CandidateRow({
               )}
             >
               {detail.displayName ?? "Unnamed participant"}
-              {detail.reluctantCount > 0 ? ` (${detail.reluctantCount} reluctant)` : ""}
+              {detail.reluctantCount > 0 ? ` (${detail.reluctantCount} if needed)` : ""}
             </span>
           ))}
         </div>
@@ -483,7 +477,7 @@ function FinalSlotBanner({
             ) : (
               <RotateCcw className="size-4" aria-hidden="true" />
             )}
-            Reopen poll
+            Reopen responses
           </Button>
         ) : null}
       </CardContent>
@@ -506,10 +500,12 @@ function FinalConfirmation({
         Confirm {formatCandidateWindow(candidate, timeZone)}
       </p>
       <p className="mt-1 leading-6 text-slate-600">
-        {durationMinutes} minutes in {timeZone}. Rank #{candidate.rank};{" "}
-        {candidate.availableParticipantCount} of {candidate.totalParticipantCount} can
-        attend, with {candidate.reluctantVoteCount} reluctant cell
-        {candidate.reluctantVoteCount === 1 ? "" : "s"}.
+        {durationMinutes} minutes in {timeZone}. {candidate.availableParticipantCount} of{" "}
+        {candidate.totalParticipantCount} can attend
+        {candidate.reluctantVoteCount > 0
+          ? `, with ${candidate.reluctantVoteCount} marking part of the time as “if needed”`
+          : ""}
+        .
       </p>
     </div>
   );

@@ -193,11 +193,11 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
       "http://localhost:3000/m/team-planning",
     );
-    expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: /private return link/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /organizer invite/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /your private link/i })).toBeNull();
   });
 
   it("uses a client-side admin invite token when joining from an invite link", async () => {
@@ -283,7 +283,7 @@ describe("ParticipantAvailabilityPainter", () => {
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
   });
 
-  it("shows the availability workflow before results until the viewer has voted", () => {
+  it("defaults to availability before the viewer has voted and allows switching views", () => {
     render(
       <ParticipantAvailabilityPainter
         data={{ ...baseData, results }}
@@ -293,20 +293,23 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    const availabilityHeading = screen.getByRole("heading", {
-      name: /availability calendar/i,
-    });
-    const resultsHeading = screen.getByRole("heading", {
-      name: /recommended shortlist/i,
-    });
-
     expect(
-      availabilityHeading.compareDocumentPosition(resultsHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.getByRole("heading", {
+        name: /availability calendar/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /best times/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: /results & shortlist/i }));
+
+    expect(screen.getByRole("heading", { name: /best times/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /availability calendar/i })).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: /participant invite/i }),
+    ).toBeInTheDocument();
   });
 
-  it("keeps results before the availability workflow after the viewer has voted", () => {
+  it("defaults returning voters to results and keeps availability one switch away", () => {
     render(
       <ParticipantAvailabilityPainter
         data={{
@@ -329,17 +332,22 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    const resultsHeading = screen.getByRole("heading", {
-      name: /recommended shortlist/i,
-    });
-    const availabilityHeading = screen.getByRole("heading", {
-      name: /availability calendar/i,
-    });
+    expect(
+      screen.getByRole("heading", {
+        name: /best times/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /availability calendar/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: /^availability$/i }));
 
     expect(
-      resultsHeading.compareDocumentPosition(availabilityHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.getByRole("heading", { name: /availability calendar/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /best times/i })).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: /participant invite/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows regular and private links for returning regular users", () => {
@@ -355,14 +363,14 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
       "http://localhost:3000/m/team-planning",
     );
-    expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
-    expect(screen.getByRole("textbox", { name: /private return link/i })).toHaveValue(
+    expect(screen.queryByRole("textbox", { name: /organizer invite/i })).toBeNull();
+    expect(screen.getByRole("textbox", { name: /your private link/i })).toHaveValue(
       "http://localhost:3000/join/member-secret-token",
     );
-    expect(screen.getByText(/only for you/i)).toBeInTheDocument();
+    expect(screen.getByText(/keep this link private/i)).toBeInTheDocument();
   });
 
   it("shows an admin invite link for role-based admin users", async () => {
@@ -390,13 +398,13 @@ describe("ParticipantAvailabilityPainter", () => {
     await waitFor(() =>
       expect(onCreateAdminInviteToken).toHaveBeenCalledWith("admin-secret-token"),
     );
-    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
       "http://localhost:3000/m/team-planning",
     );
-    expect(screen.getByRole("textbox", { name: /admin invite link/i })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: /organizer invite/i })).toHaveValue(
       "http://localhost:3000/m/team-planning#adminInviteToken=admin-invite-secret",
     );
-    expect(screen.getByRole("textbox", { name: /private return link/i })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: /your private link/i })).toHaveValue(
       "http://localhost:3000/join/admin-secret-token",
     );
   });
@@ -420,10 +428,10 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox", { name: /regular invite link/i })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
       "http://localhost:3000/m/team-planning",
     );
-    expect(screen.queryByRole("textbox", { name: /admin invite link/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /organizer invite/i })).toBeNull();
   });
 
   it("creates a membership before the first persisted availability write", async () => {
@@ -462,9 +470,9 @@ describe("ParticipantAvailabilityPainter", () => {
       ]),
     );
     expect(
-      (
-        await screen.findByRole("textbox", { name: /^private return link$/i })
-      ).getAttribute("value"),
+      (await screen.findByRole("textbox", { name: /^your private link$/i })).getAttribute(
+        "value",
+      ),
     ).toContain("/join/member-secret-token");
     expect(onMembershipTokenAvailable).toHaveBeenCalledWith(
       "member-secret-token",
@@ -592,6 +600,7 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: /^availability$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
     fireEvent.keyDown(screen.getByRole("gridcell", { name: /thu jun 25 09:00 yes/i }), {
       key: " ",
@@ -606,6 +615,41 @@ describe("ParticipantAvailabilityPainter", () => {
           timeZone: "Europe/Berlin",
         },
       ]),
+    );
+  });
+
+  it("switches to results after a participant saves their vote", async () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          ownAvailabilityRecords: [
+            {
+              cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+              startUtc: "2026-06-25T07:00:00.000Z",
+              endUtc: "2026-06-25T07:30:00.000Z",
+              timeZone: "Europe/Berlin",
+              response: "yes",
+            },
+          ],
+          results,
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn().mockResolvedValue(undefined)}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /^availability$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save response/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /best times/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /results & shortlist/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
   });
 
@@ -671,6 +715,7 @@ describe("ParticipantAvailabilityPainter", () => {
     expect(screen.getAllByText(/thu, jun 25, 9:00 am-10:00 am/i).length).toBeGreaterThan(
       0,
     );
+    fireEvent.click(screen.getByRole("tab", { name: /^availability$/i }));
     expect(screen.getByRole("button", { name: /join and save/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^yes$/i })).toBeDisabled();
   });

@@ -7,21 +7,21 @@ import { CalendarGridPreview } from "@/components/ui/calendar-grid-preview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { routes } from "@/lib/routes";
 
-const foundationItems = [
+const featureItems = [
   {
     icon: CalendarDays,
-    label: "Calendar-heavy UI primitives",
-    text: "Responsive surfaces, buttons, badges, and a reusable calendar grid preview.",
+    label: "Share your availability",
+    text: "Invite everyone to mark the times that work for them on one simple calendar.",
   },
   {
     icon: Link2,
-    label: "Secret-link route map",
-    text: "Placeholders for public polls, membership links, and organizer links.",
+    label: "No account required",
+    text: "Create a meeting and collect responses without asking anyone to sign up.",
   },
   {
     icon: Mail,
-    label: "Optional email recovery",
-    text: "Verify email with a passwordless magic link and recover attached memberships.",
+    label: "Come back anytime",
+    text: "Add your email to keep your meetings easy to find on any device.",
   },
 ];
 
@@ -35,8 +35,8 @@ export default function HomePage() {
               Meeting Scheduler
             </h1>
             <p className="max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
-              Create a Doodle-style poll without an account, then share a public
-              participant link and keep your personal admin membership link.
+              Find the best time for everyone. Create a meeting, share the link, and
+              choose from the times that work best.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -50,7 +50,7 @@ export default function HomePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="size-5 text-primary" aria-hidden="true" />
-              Calendar Surface
+              See availability at a glance
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -60,7 +60,7 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        {foundationItems.map((item) => (
+        {featureItems.map((item) => (
           <RoutePlaceholder
             key={item.label}
             icon={item.icon}

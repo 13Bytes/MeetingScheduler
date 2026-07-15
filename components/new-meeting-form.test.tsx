@@ -132,11 +132,11 @@ describe("NewMeetingForm", () => {
     expect(screen.getByText(/at least as long as the meeting/i)).toBeInTheDocument();
   });
 
-  it("shows a configuration message without a Convex mutation", () => {
+  it("shows an unavailable message without a meeting mutation", () => {
     render(<NewMeetingForm />);
 
     expect(screen.getByRole("button", { name: /create meeting/i })).toBeDisabled();
-    expect(screen.getByText(/NEXT_PUBLIC_CONVEX_URL/u)).toBeInTheDocument();
+    expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
   });
 
   it("normalizes time zone aliases for stable hydration", () => {

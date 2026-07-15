@@ -15,7 +15,10 @@ import { readUserSession } from "@/lib/user-server-session";
 export async function POST(request: NextRequest) {
   const session = await readUserSession(request);
   if (!session) {
-    return NextResponse.json({ error: "Open or create a meeting first." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Open or create a meeting first." },
+      { status: 401 },
+    );
   }
 
   try {
@@ -51,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(
       {
-        error: safeErrorMessage(caughtError, "Unable to recover this membership link."),
+        error: safeErrorMessage(caughtError, "Unable to restore access to this meeting."),
       },
       { status: 400 },
     );

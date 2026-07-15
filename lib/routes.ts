@@ -46,28 +46,26 @@ function normalizeOrigin(origin: string): string {
 export const routeMap = [
   {
     path: routes.home,
-    purpose: "Landing and project foundation overview.",
+    purpose: "Meeting Scheduler home page.",
   },
   {
     path: routes.newMeeting,
-    purpose: "Anonymous meeting creation flow.",
+    purpose: "Create a meeting without an account.",
   },
   {
     path: routes.identity,
-    purpose: "Optional passwordless email verification request flow.",
+    purpose: "Sign in securely by email.",
   },
   {
     path: routes.identityDashboard,
-    purpose: "Verified email recovery dashboard for attached memberships.",
+    purpose: "View meetings associated with a verified email.",
   },
   {
     path: "/m/[meetingSlug]",
-    purpose:
-      "Public meeting poll route for joining and painting participant availability.",
+    purpose: "Open a meeting and share participant availability.",
   },
   {
     path: "/join/[membershipToken]",
-    purpose:
-      "Secret membership route for returning to a response and admin setup access.",
+    purpose: "Return to a meeting with private participant or organizer access.",
   },
 ] as const;

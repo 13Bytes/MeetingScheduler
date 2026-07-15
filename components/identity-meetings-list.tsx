@@ -34,7 +34,7 @@ export type IdentityMeetingsDashboard = {
 
 export function IdentityMeetingsList({
   dashboard,
-  emptyMessage = "No meetings are attached to this browser session yet.",
+  emptyMessage = "You have not created or joined any meetings yet.",
 }: {
   dashboard: IdentityMeetingsDashboard;
   emptyMessage?: string;
@@ -72,19 +72,23 @@ export function IdentityMeetingsList({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <Badge>{membership.role === "admin" ? "Admin" : "Participant"}</Badge>
+                <Badge>{membership.role === "admin" ? "Organizer" : "Participant"}</Badge>
                 {membership.hasAvailability ? <Badge>Response saved</Badge> : null}
-                <Badge>{membership.meeting.lifecycleState}</Badge>
+                <Badge>
+                  {membership.meeting.lifecycleState === "finalized"
+                    ? "Finalized"
+                    : "Open"}
+                </Badge>
               </div>
               {membership.displayName ? (
                 <p className="text-sm leading-6 text-slate-600">
-                  Membership name: {membership.displayName}
+                  Responding as {membership.displayName}
                 </p>
               ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="ghost">
                   <Link href={routes.meetingPoll(membership.meeting.slug)}>
-                    Public poll
+                    Open meeting
                   </Link>
                 </Button>
               </div>
@@ -92,7 +96,7 @@ export function IdentityMeetingsList({
                 <RecoverMembershipLinkButton membershipId={membership.membershipId} />
               ) : (
                 <p className="text-sm leading-6 text-slate-600">
-                  Save availability or become an admin to recover a private link here.
+                  Add your availability to keep this meeting in your list.
                 </p>
               )}
             </CardContent>

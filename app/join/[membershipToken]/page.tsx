@@ -20,9 +20,9 @@ export default async function JoinByMembershipLinkPage({
       ) : (
         <RoutePlaceholder
           icon={KeyRound}
-          eyebrow="Secret membership link"
+          eyebrow="Your meeting"
           title="Participant availability"
-          description="Set NEXT_PUBLIC_CONVEX_URL to resolve the membership link and edit availability."
+          description="This meeting is temporarily unavailable. Please try again later."
         />
       )}
     </AppShell>

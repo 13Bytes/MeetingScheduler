@@ -96,7 +96,7 @@ export function NewMeetingForm({
     setError(null);
 
     if (!createMeeting) {
-      setError("Convex is not configured for this environment yet.");
+      setError("Meeting creation is temporarily unavailable. Please try again later.");
       return;
     }
 
@@ -180,8 +180,8 @@ export function NewMeetingForm({
               Create a meeting
             </h1>
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Set broad candidate windows, create your anonymous admin membership, then
-              share the public poll link.
+              Add a few details and choose when you are available. You can invite everyone
+              after you create the meeting.
             </p>
           </div>
         </section>
@@ -229,7 +229,7 @@ export function NewMeetingForm({
                 placeholder="ada@example.com"
               />
               <span className="text-xs leading-5 text-slate-500">
-                Used only to help recover your admin membership if you lose the link.
+                Used only to help you find this meeting if you lose your private link.
               </span>
             </label>
             <label className="grid gap-2">
@@ -273,7 +273,9 @@ export function NewMeetingForm({
               </select>
             </label>
             <label className="grid gap-2">
-              <span className="text-sm font-medium text-foreground">Privacy mode</span>
+              <span className="text-sm font-medium text-foreground">
+                Response visibility
+              </span>
               <select
                 className={inputClassName}
                 value={creatorPrivacyMode}
@@ -305,11 +307,11 @@ export function NewMeetingForm({
               />
               <span className="grid gap-1">
                 <span className="text-sm font-medium text-foreground">
-                  Everyone with a membership can administer this meeting
+                  Let every participant manage this meeting
                 </span>
                 <span className="text-sm leading-6 text-slate-600">
-                  Your creator link is still a personal admin membership link. This option
-                  only changes how later member links are authorized.
+                  Anyone who joins can adjust the meeting, invite others, and choose the
+                  final time.
                 </span>
               </span>
             </label>
@@ -409,10 +411,10 @@ export function NewMeetingForm({
 
             <div className="rounded-md border border-border bg-surface-muted p-4 text-sm text-slate-600">
               {previewRanges.length > 0
-                ? `${previewRanges.length} broad allowed range${
+                ? `Participants can choose from ${previewRanges.length} time window${
                     previewRanges.length === 1 ? "" : "s"
-                  } will be stored in ${timeZone}.`
-                : "Adjust the allowed-time settings to preview generated ranges."}
+                  } in ${timeZone}.`
+                : "Choose at least one time window for participants."}
             </div>
           </CardContent>
         </Card>
@@ -442,7 +444,7 @@ export function NewMeetingForm({
           </Button>
           {!createMeeting ? (
             <span className="text-sm text-slate-600">
-              Set `NEXT_PUBLIC_CONVEX_URL` to enable live creation.
+              Meeting creation is temporarily unavailable.
             </span>
           ) : null}
         </div>
@@ -451,12 +453,12 @@ export function NewMeetingForm({
       <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle>After Creation</CardTitle>
+            <CardTitle>What happens next</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm leading-6 text-slate-600">
-              You will be redirected to your private admin membership link. The meeting
-              page will show invitation links and your private return link.
+              We will take you to your meeting, where you can copy the invitation link and
+              start adding your own availability.
             </p>
           </CardContent>
         </Card>

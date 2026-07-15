@@ -13,10 +13,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { getConvexUrl, getInternalIdentitySecret } from "@/lib/identity-internal";
 import { safeErrorMessage } from "@/lib/security-redaction";
-import {
-  userSessionCookieName,
-  verifyUserSession,
-} from "@/lib/user-session";
+import { userSessionCookieName, verifyUserSession } from "@/lib/user-session";
 import { getIdentitySessionSecret } from "@/lib/identity-session";
 
 export const dynamic = "force-dynamic";
@@ -39,13 +36,13 @@ export default async function IdentityPage() {
           </h1>
           {dashboard && !("error" in dashboard) ? (
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Meetings are tied to this browser session. Verify an email to recover this
-              same list from another browser later.
+              Your meetings are ready here. Add an email if you want to find them from
+              another device too.
             </p>
           ) : (
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Create, join, or open a private return link to add meetings here. Verify an
-              email to recover this session later.
+              Meetings you create or join will appear here. Add an email to keep them easy
+              to find on any device.
             </p>
           )}
           {!session ? (
@@ -89,6 +86,6 @@ async function loadDashboard(
       "Unable to load identity meetings",
       safeErrorMessage(caughtError, "meeting list load failed"),
     );
-    return { error: "Unable to load meetings for this browser session." };
+    return { error: "Unable to load your meetings right now." };
   }
 }

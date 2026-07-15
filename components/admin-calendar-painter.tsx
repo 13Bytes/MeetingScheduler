@@ -80,7 +80,7 @@ export function ConnectedAdminCalendarPainter({
         <Card>
           <CardContent className="flex min-h-64 items-center justify-center gap-3 pt-5 text-sm text-slate-600">
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            Loading membership link
+            Loading your meeting
           </CardContent>
         </Card>
       </AdminPainterShell>
@@ -91,8 +91,8 @@ export function ConnectedAdminCalendarPainter({
     return (
       <AdminPainterShell>
         <PermissionPanel
-          title="Membership link unavailable"
-          description="This secret membership link is invalid, revoked, or no longer points to a meeting."
+          title="Meeting link unavailable"
+          description="This private link is invalid or no longer active."
         />
       </AdminPainterShell>
     );
@@ -179,7 +179,7 @@ export function AdminCalendarPainter({
     setError(null);
     setNotice(null);
     if (!canEdit) {
-      setError("This meeting cannot be edited from your membership.");
+      setError("You do not have permission to edit this meeting.");
       return;
     }
     if (!validation.isValid) {
@@ -219,34 +219,34 @@ export function AdminCalendarPainter({
   return (
     <AdminPainterShell>
       <section className="grid gap-3">
-        <Badge variant="accent">Admin setup</Badge>
+        <Badge variant="accent">Organizer</Badge>
         <div className="grid gap-2">
           <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
             {meeting.title}
           </h1>
           <p className="max-w-4xl text-sm leading-6 text-slate-600">
-            Paint broad candidate regions for participants to use later. The grid uses{" "}
-            {meeting.canonicalTimeZone}, {meeting.granularityMinutes}-minute cells, and a{" "}
-            {meeting.durationMinutes}-minute meeting duration.
+            Choose the times participants can respond to. Times are shown in{" "}
+            {meeting.canonicalTimeZone}, and the meeting will last{" "}
+            {meeting.durationMinutes} minutes.
           </p>
         </div>
       </section>
 
       {!capabilities.canAdminister ? (
         <PermissionPanel
-          title="Read-only membership"
-          description="This membership can view the admin constraints, but it does not have permission to edit them."
+          title="View only"
+          description="You can view these times, but only an organizer can change them."
         />
       ) : null}
 
       {capabilities.canAdminister && meeting.lifecycleState === "finalized" ? (
         <PermissionPanel
           title="Finalized meeting"
-          description="Finalized polls are read-only until an admin reopens them."
+          description="This meeting is closed. An organizer can reopen it if plans change."
         />
       ) : null}
       <p className="sr-only" aria-live="polite">
-        {`${paintedCellCount} allowed cells selected.`}
+        {`${paintedCellCount} times selected.`}
       </p>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
@@ -255,7 +255,7 @@ export function AdminCalendarPainter({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <CardTitle className="flex items-center gap-2">
                 <CalendarDays className="size-5 text-primary" aria-hidden="true" />
-                Constraint Calendar
+                Available times
               </CardTitle>
               <BrushControls mode={mode} disabled={!canEdit} onModeChange={setMode} />
             </div>
@@ -353,11 +353,11 @@ export function AdminCalendarPainter({
             <CardContent className="space-y-4">
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <dt className="text-slate-500">Allowed cells</dt>
+                  <dt className="text-slate-500">Selected times</dt>
                   <dd className="font-semibold text-foreground">{paintedCellCount}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">Stored ranges</dt>
+                  <dt className="text-slate-500">Time windows</dt>
                   <dd className="font-semibold text-foreground">{ranges.length}</dd>
                 </div>
               </dl>
@@ -365,7 +365,7 @@ export function AdminCalendarPainter({
                 <p className="text-sm leading-6 text-warning">{validation.message}</p>
               ) : (
                 <p className="text-sm leading-6 text-slate-600">
-                  Painted ranges can fit the full meeting duration.
+                  Your selection has enough room for the full meeting.
                 </p>
               )}
               {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
@@ -428,7 +428,7 @@ function CalendarPaintGrid({
         className="grid min-w-[720px] sm:min-w-[860px]"
         style={{ gridTemplateColumns: columnTemplate }}
         role="grid"
-        aria-label="Admin allowed time calendar"
+        aria-label="Organizer availability calendar"
       >
         <div className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600">
           Time

@@ -39,7 +39,7 @@ export default async function IdentityDashboardPage({
               All Meetings
             </h1>
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Verify your email to recover meetings tied to this browser session.
+              Enter your email and we will send you a secure sign-in link.
             </p>
             {error ? (
               <div
@@ -65,7 +65,7 @@ export default async function IdentityDashboardPage({
       safeErrorMessage(caughtError, "dashboard load failed"),
     );
     dashboard = {
-      error: "Unable to load the recovery dashboard.",
+      error: "Unable to load your meetings right now.",
     };
   }
 
@@ -73,18 +73,18 @@ export default async function IdentityDashboardPage({
     <AppShell>
       <UserMembershipImporter />
       <section className="space-y-3">
-        <Badge variant="accent">Browser session</Badge>
+        <Badge variant="accent">Your meetings</Badge>
         <h1 className="text-3xl font-semibold tracking-normal text-foreground">
           All Meetings
         </h1>
         {"error" in dashboard ? (
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            Meetings tied to this browser session appear here.
+            Meetings you create or join will appear here.
           </p>
         ) : (
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            Meetings are tied to this browser session. Verified emails are recovery
-            options, not the source of membership ownership.
+            Open a meeting to update your availability, invite others, or manage its
+            details.
           </p>
         )}
       </section>
@@ -99,16 +99,14 @@ export default async function IdentityDashboardPage({
       ) : (
         <IdentityMeetingsList
           dashboard={dashboard}
-          emptyMessage="No meetings are attached to this session yet."
+          emptyMessage="You have not created or joined any meetings yet."
         />
       )}
     </AppShell>
   );
 }
 
-async function loadIdentityDashboard(
-  userId: string,
-): Promise<IdentityMeetingsDashboard> {
+async function loadIdentityDashboard(userId: string): Promise<IdentityMeetingsDashboard> {
   const convex = new ConvexHttpClient(getConvexUrl());
   return await convex.query(api.meetings.listUserDashboard, {
     internalSecret: getInternalIdentitySecret(),

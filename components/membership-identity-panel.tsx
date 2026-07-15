@@ -68,7 +68,7 @@ export function MembershipIdentityPanel({
       if (!response.ok || !body.tokenFingerprint) {
         throw new Error(body.error ?? "Unable to request verification.");
       }
-      setStatus(`Verification link queued. Fingerprint ${body.tokenFingerprint}.`);
+      setStatus("Check your inbox for a secure sign-in link.");
       setDevMagicLinkUrl(body.devMagicLinkUrl ?? null);
     } catch (caughtError) {
       setError(
@@ -96,15 +96,15 @@ export function MembershipIdentityPanel({
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(body.error ?? "Unable to attach this membership.");
+        throw new Error(body.error ?? "Unable to add this meeting to your account.");
       }
       setJustAttached(true);
-      setStatus("This membership is now recoverable from your verified email.");
+      setStatus("This meeting is now available on your other devices.");
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to attach this membership.",
+          : "Unable to add this meeting to your account.",
       );
     } finally {
       setIsBusy(false);
@@ -116,7 +116,7 @@ export function MembershipIdentityPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="size-5 text-primary" aria-hidden="true" />
-          Optional Email Recovery
+          Keep this meeting
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -131,7 +131,7 @@ export function MembershipIdentityPanel({
             {isAttached ? (
               <p className="flex items-center gap-2 text-sm text-teal-700">
                 <Check className="size-4" aria-hidden="true" />
-                This membership has email recovery attached.
+                This meeting is saved to your email.
               </p>
             ) : (
               <Button
@@ -146,18 +146,18 @@ export function MembershipIdentityPanel({
                 ) : (
                   <ShieldCheck className="size-4" aria-hidden="true" />
                 )}
-                Attach to this membership
+                Save to my email
               </Button>
             )}
             <Button asChild variant="ghost" className="w-full">
-              <Link href="/identity/dashboard">Open recovery dashboard</Link>
+              <Link href="/identity/dashboard">View all meetings</Link>
             </Button>
           </>
         ) : (
           <div className="grid gap-3">
             <p className="text-sm leading-6 text-slate-600">
-              This private return link adds this meeting to the current browser session.
-              Add a verified email later if you want recovery from another browser.
+              Add your email to open this meeting from any device. We will send you a
+              secure sign-in link.
             </p>
             <label className="grid gap-2">
               <span className="text-sm font-medium text-foreground">Email</span>
@@ -182,7 +182,7 @@ export function MembershipIdentityPanel({
                 <Mail className="size-4" aria-hidden="true" />
               )}
               Send verification link
-              </Button>
+            </Button>
           </div>
         )}
         {status ? (
@@ -196,7 +196,7 @@ export function MembershipIdentityPanel({
                 className="mt-2 block break-all font-medium underline"
                 href={devMagicLinkUrl}
               >
-                Open local development magic link
+                Continue with verification
               </a>
             ) : null}
           </div>

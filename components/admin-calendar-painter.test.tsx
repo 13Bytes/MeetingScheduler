@@ -66,7 +66,7 @@ describe("AdminCalendarPainter", () => {
       />,
     );
 
-    expect(screen.getByText(/read-only membership/i)).toBeInTheDocument();
+    expect(screen.getByText(/view only/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^allow$/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /save allowed regions/i })).toBeDisabled();
   });
