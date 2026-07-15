@@ -43,8 +43,11 @@ describe("email templates", () => {
 
     expect(finalized.subject).toBe("Final time selected: Research Sync");
     expect(finalized.text).toContain("Selected time:");
+    expect(finalized.text).toContain("An organizer finalized this meeting.");
     expect(reopened.subject).toBe("Meeting reopened: Research Sync");
-    expect(reopened.text).toContain("reopened");
+    expect(reopened.text).toContain(
+      "An organizer reopened this meeting for more responses.",
+    );
   });
 
   it("builds absolute lifecycle URLs", () => {

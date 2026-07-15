@@ -57,14 +57,14 @@ export function IdentityLoginPanel() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Mail className="size-5 text-primary" aria-hidden="true" />
-          Email Recovery
+          Keep your meetings
         </CardTitle>
       </CardHeader>
       <CardContent>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <p className="text-sm leading-6 text-slate-600">
-            Verify an email to link this browser session&apos;s meetings and recover them
-            later. Meeting creation and joining still work without this.
+            Add your email to open your meetings from any device. You can still create and
+            join meetings without it.
           </p>
           <label className="grid gap-2">
             <span className="text-sm font-medium text-foreground">Email</span>
@@ -103,15 +103,14 @@ export function IdentityLoginPanel() {
             >
               <span className="flex items-center gap-2 font-medium">
                 <Check className="size-4" aria-hidden="true" />
-                Verification link queued
+                Check your inbox
               </span>
-              <span className="break-all">Fingerprint {result.tokenFingerprint}</span>
               {result.devMagicLinkUrl ? (
                 <a
                   className="break-all font-medium text-teal-950 underline"
                   href={result.devMagicLinkUrl}
                 >
-                  Open local development magic link
+                  Continue with verification
                 </a>
               ) : null}
             </div>

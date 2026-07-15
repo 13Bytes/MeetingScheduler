@@ -56,13 +56,13 @@ describe("MeetingResultsPanel", () => {
   it("shows a recommended shortlist and detailed participant names when provided", () => {
     render(<MeetingResultsPanel results={detailedResults} canAdminister />);
 
-    expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
-    expect(screen.getByText(/admin view/i)).toBeInTheDocument();
+    expect(screen.getByText(/best times/i)).toBeInTheDocument();
+    expect(screen.getByText(/organizer/i)).toBeInTheDocument();
     expect(screen.getByText(/2 of 2 can attend/i)).toBeInTheDocument();
-    expect(screen.getByText(/2 of 2 participants have voted/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 2 participants have responded/i)).toBeInTheDocument();
     expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Bruno/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Bruno \(1 reluctant\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bruno \(1 if needed\)/i)).toBeInTheDocument();
   });
 
   it("hides zero-attendee slots from recommendations and the heatmap", () => {
@@ -90,7 +90,7 @@ describe("MeetingResultsPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
+    expect(screen.getByText(/best times/i)).toBeInTheDocument();
     expect(screen.getByText(/2 of 2 can attend/i)).toBeInTheDocument();
     expect(screen.queryByText(/0 of 2 can attend/i)).not.toBeInTheDocument();
     expect(screen.queryByText("0/2")).not.toBeInTheDocument();
@@ -117,9 +117,9 @@ describe("MeetingResultsPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/recommended shortlist/i)).toBeInTheDocument();
+    expect(screen.getByText(/best times/i)).toBeInTheDocument();
     expect(
-      screen.getAllByText(/no candidate slots have any attendees yet/i).length,
+      screen.getAllByText(/no available times match the responses yet/i).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText(/0 of 2 can attend/i)).not.toBeInTheDocument();
   });
@@ -146,7 +146,7 @@ describe("MeetingResultsPanel", () => {
 
     expect(screen.getByText(/summary only/i)).toBeInTheDocument();
     expect(screen.getByText(/2 of 2 can attend/i)).toBeInTheDocument();
-    expect(screen.getByText(/2 of 2 participants have voted/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 2 participants have responded/i)).toBeInTheDocument();
     expect(screen.getByText(/names are hidden/i)).toBeInTheDocument();
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
     expect(screen.queryByText(/Bruno/i)).not.toBeInTheDocument();
@@ -166,8 +166,10 @@ describe("MeetingResultsPanel", () => {
       />,
     );
 
-    expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/results pending/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /^best times$/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/waiting for responses/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/no participants have joined yet/i),
     ).not.toBeInTheDocument();
@@ -185,20 +187,40 @@ describe("MeetingResultsPanel", () => {
       />,
     );
 
-    expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: /final selection/i }),
+      screen.queryByRole("heading", { name: /^best times$/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: /score heatmap/i }),
+      screen.queryByRole("heading", { name: /choose the final time/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /availability comparison/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(/recommendations will appear after someone saves availability/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/awaiting availability/i)).toBeInTheDocument();
+    expect(screen.getByText(/best times will appear/i)).toBeInTheDocument();
+  });
+
+  it("explains when voted availability cannot form a full meeting window", () => {
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidateCount: 0,
+          candidates: [],
+          shortlist: [],
+        }}
+      />,
+    );
+
     expect(
-      screen.getByText(/final selection and score heatmap will appear/i),
-    ).toBeInTheDocument();
+      screen.getAllByText(/selected time windows are too short for this meeting/i),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByText(/comparison will appear once participants share/i),
+    ).not.toBeInTheDocument();
   });
 
   it("lets admins finalize the recommended shortlist selection", async () => {
@@ -215,6 +237,7 @@ describe("MeetingResultsPanel", () => {
     expect(
       screen.getByText(/confirm thu, jun 25, 9:00 am-10:00 am/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/1 response cell marking.*if needed/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /finalize selected time/i }));
 
     await waitFor(() =>
@@ -332,12 +355,14 @@ describe("MeetingResultsPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/final time/i)).toBeInTheDocument();
-    expect(screen.queryByText(/recommended shortlist/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/^final time$/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /^best times$/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText(/thu, jun 25, 9:00 am-10:00 am/i).length).toBeGreaterThan(
       0,
     );
-    fireEvent.click(screen.getByRole("button", { name: /reopen poll/i }));
+    fireEvent.click(screen.getByRole("button", { name: /reopen responses/i }));
 
     await waitFor(() => expect(onReopen).toHaveBeenCalledTimes(1));
   });

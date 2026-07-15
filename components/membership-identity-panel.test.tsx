@@ -31,17 +31,17 @@ describe("MembershipIdentityPanel", () => {
     render(<MembershipIdentityPanel membershipToken="member-secret" />);
 
     const attachButton = await screen.findByRole("button", {
-      name: /attach to this membership/i,
+      name: /save to my email/i,
     });
     fireEvent.click(attachButton);
 
     await waitFor(() =>
       expect(
-        screen.getByText(/this membership has email recovery attached/i),
+        screen.getByText(/this meeting is saved to your email/i),
       ).toBeInTheDocument(),
     );
     expect(
-      screen.queryByRole("button", { name: /attach to this membership/i }),
+      screen.queryByRole("button", { name: /save to my email/i }),
     ).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/identity/attach-membership",
@@ -68,16 +68,14 @@ describe("MembershipIdentityPanel", () => {
       <MembershipIdentityPanel membershipToken="member-secret" />,
     );
     expect(
-      await screen.findByRole("button", { name: /attach to this membership/i }),
+      await screen.findByRole("button", { name: /save to my email/i }),
     ).toBeInTheDocument();
 
     rerender(
       <MembershipIdentityPanel membershipToken="member-secret" isEmailRecoveryAttached />,
     );
 
-    expect(
-      screen.getByText(/this membership has email recovery attached/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/this meeting is saved to your email/i)).toBeInTheDocument();
   });
 });
 

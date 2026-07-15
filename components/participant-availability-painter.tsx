@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  BarChart3,
   CalendarDays,
   Check,
   Clipboard,
@@ -109,6 +110,8 @@ type CreateAdminInviteToken = (
 
 const adminInviteUrlCache = new Map<string, string>();
 
+type MeetingView = "availability" | "results";
+
 export function ConnectedPublicParticipantMeeting({
   meetingSlug,
   adminInviteToken,
@@ -194,7 +197,7 @@ export function ConnectedPublicParticipantMeeting({
     return (
       <PermissionPanel
         title="Meeting unavailable"
-        description="This public meeting link does not point to an active poll."
+        description="This meeting link is invalid or the meeting is no longer available."
       />
     );
   }
@@ -290,14 +293,14 @@ export function ConnectedMembershipAvailability({
   const [showAdminSetup, setShowAdminSetup] = useState(false);
 
   if (meetingData === undefined) {
-    return <LoadingPanel label="Loading membership link" />;
+    return <LoadingPanel label="Loading your meeting" />;
   }
 
   if (meetingData === null) {
     return (
       <PermissionPanel
-        title="Membership link unavailable"
-        description="This secret membership link is invalid, revoked, or no longer points to a meeting."
+        title="Meeting link unavailable"
+        description="This private link is invalid or no longer active."
       />
     );
   }
@@ -338,7 +341,7 @@ export function ConnectedMembershipAvailability({
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm leading-6 text-slate-600">
-              This membership can also edit the admin-allowed calendar regions.
+              You can also choose which times participants may respond to.
             </p>
             <Button
               type="button"
@@ -346,7 +349,7 @@ export function ConnectedMembershipAvailability({
               onClick={() => setShowAdminSetup((value) => !value)}
             >
               <Settings2 className="size-4" aria-hidden="true" />
-              {showAdminSetup ? "Hide admin setup" : "Open admin setup"}
+              {showAdminSetup ? "Hide available times" : "Edit available times"}
             </Button>
           </CardContent>
         </Card>
@@ -459,9 +462,12 @@ export function ParticipantAvailabilityPainter({
     initialResponses,
     createInitialAvailabilityPaintState,
   );
-  const [hasSubmittedAvailability, setHasSubmittedAvailability] = useState(
-    () => initialResponses.size > 0,
+  const [activeView, setActiveView] = useState<MeetingView>(() =>
+    data.results && (initialResponses.size > 0 || meeting.lifecycleState === "finalized")
+      ? "results"
+      : "availability",
   );
+  const visibleView = data.results ? activeView : "availability";
   const summary = useMemo(
     () => summarizeAvailability(grid, paintState.responsesByCellKey),
     [grid, paintState.responsesByCellKey],
@@ -488,7 +494,6 @@ export function ParticipantAvailabilityPainter({
     pendingSavedResponsesRef.current = null;
     dispatch({ type: "replace", responsesByCellKey: initialResponses });
     savedResponsesRef.current = initialResponses;
-    setHasSubmittedAvailability(initialResponses.size > 0);
   }, [hasLocalEdits, initialResponses]);
 
   const personalMembershipUrl = useMemo(() => {
@@ -542,7 +547,7 @@ export function ParticipantAvailabilityPainter({
     setNotice(null);
 
     if (!canEdit) {
-      setError("This meeting is read-only until an admin reopens it.");
+      setError("Responses are closed until an organizer reopens the meeting.");
       return;
     }
 
@@ -561,11 +566,11 @@ export function ParticipantAvailabilityPainter({
 
     if (!activeToken) {
       if (!onCreateMembership) {
-        setError("This membership link cannot create a new participant.");
+        setError("This link cannot add a new participant.");
         return;
       }
     } else if (existingMembershipNeedsName && !onUpdateDisplayName) {
-      setError("This membership link cannot update a display name.");
+      setError("This link cannot update your display name.");
       return;
     }
 
@@ -592,7 +597,6 @@ export function ParticipantAvailabilityPainter({
         const savedResponses = new Map(paintState.responsesByCellKey);
         savedResponsesRef.current = savedResponses;
         pendingSavedResponsesRef.current = savedResponses;
-        setHasSubmittedAvailability(savedResponses.size > 0);
         setHasLocalEdits(false);
         setNotice("Availability saved.");
       } else if (wasNewJoin) {
@@ -601,6 +605,9 @@ export function ParticipantAvailabilityPainter({
         setNotice("Display name saved.");
       } else {
         setNotice("No availability changes to save.");
+      }
+      if (data.results && paintState.responsesByCellKey.size > 0) {
+        setActiveView("results");
       }
     } catch (caughtError) {
       setError(
@@ -614,7 +621,7 @@ export function ParticipantAvailabilityPainter({
   }
 
   function applyAllAllowed(response: ParticipantPaintMode) {
-    if (!canEdit) {
+    if (!canEdit || isSaving) {
       return;
     }
     setError(null);
@@ -644,8 +651,22 @@ export function ParticipantAvailabilityPainter({
     />
   ) : null;
 
+  const meetingLinksPanel = (
+    <MeetingLinksPanel
+      publicParticipantUrl={publicParticipantUrl}
+      personalMembershipUrl={personalMembershipUrl}
+      canShareAdminInvite={canShareAdminInvite}
+      membershipToken={membershipToken ?? null}
+      meetingSlug={meeting.slug}
+      onCreateAdminInviteToken={onCreateAdminInviteToken}
+      onCopyError={() =>
+        setError("Clipboard access is unavailable. Select the link text to copy it.")
+      }
+    />
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <section className="grid gap-3">
         <div className="grid gap-2">
           <div className="flex flex-row gap-2 items-center">
@@ -654,9 +675,9 @@ export function ParticipantAvailabilityPainter({
             </h1>
             <div>
               {meeting.lifecycleState === "finalized" ? (
-                <Badge>Participant response Finalized</Badge>
+                <Badge>Finalized</Badge>
               ) : (
-                <Badge variant="accent">Participant response Open</Badge>
+                <Badge variant="accent">Open</Badge>
               )}
             </div>
           </div>
@@ -666,9 +687,8 @@ export function ParticipantAvailabilityPainter({
             </p>
           ) : null}
           <p className="max-w-4xl text-sm leading-6 text-slate-600">
-            Paint your availability in {meeting.canonicalTimeZone}. Each cell is{" "}
-            {meeting.granularityMinutes} minutes; candidate meetings last{" "}
-            {meeting.durationMinutes} minutes.
+            Mark when you can attend. Times are shown in {meeting.canonicalTimeZone}, and
+            the meeting will last {meeting.durationMinutes} minutes.
           </p>
         </div>
       </section>
@@ -676,180 +696,248 @@ export function ParticipantAvailabilityPainter({
       {meeting.lifecycleState === "finalized" ? (
         <PermissionPanel
           title="Finalized meeting"
-          description="Responses are read-only until an admin reopens the poll."
+          description="Responses are closed. An organizer can reopen the meeting if plans change."
         />
       ) : null}
       <p className="sr-only" aria-live="polite">
-        {`${summary.yes} yes, ${summary.reluctant} reluctant, ${summary.no} no responses selected.`}
+        {`${summary.yes} yes, ${summary.reluctant} if needed, ${summary.no} no responses selected.`}
       </p>
 
-      {hasSubmittedAvailability ? resultsPanel : null}
+      <nav
+        className="order-first sticky top-0 z-20 rounded-lg border border-border bg-surface/95 p-1 shadow-sm backdrop-blur sm:order-none"
+        aria-label="Meeting sections"
+      >
+        <div
+          className={cn("grid gap-1", data.results ? "grid-cols-2" : "grid-cols-1")}
+          role="tablist"
+        >
+          <MeetingViewTab
+            id="availability-tab"
+            controls="availability-view"
+            isActive={visibleView === "availability"}
+            icon={CalendarDays}
+            onClick={() => setActiveView("availability")}
+          >
+            Availability
+          </MeetingViewTab>
+          {data.results ? (
+            <MeetingViewTab
+              id="results-tab"
+              controls="results-view"
+              isActive={visibleView === "results"}
+              icon={BarChart3}
+              onClick={() => setActiveView("results")}
+            >
+              Results &amp; shortlist
+            </MeetingViewTab>
+          ) : null}
+        </div>
+      </nav>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,330px)]">
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b border-border">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="size-5 text-primary" aria-hidden="true" />
-                Availability Calendar
-              </CardTitle>
-              <AvailabilityBrushControls
-                mode={mode}
-                disabled={!canEdit}
-                onModeChange={setMode}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <AvailabilityGrid
-              grid={grid}
-              mode={mode}
-              disabled={!canEdit}
-              responsesByCellKey={paintState.responsesByCellKey}
-              previewCellKeys={paintState.previewCellKeys}
-              rangeAnchorCellKey={rangeAnchorCellKey}
-              isRangeSelectionActive={isRangeSelectionActive}
-              onBegin={(cellKey) => {
-                setError(null);
-                setNotice(null);
-                dispatch({ type: "begin", cellKey, mode });
-              }}
-              onHover={(cellKey) => dispatch({ type: "hover", cellKey, grid })}
-              onCommit={() => dispatch({ type: "commit" })}
-              onCommittedEdit={() => setHasLocalEdits(true)}
-              onCancel={() => dispatch({ type: "cancel" })}
-              onApplyCell={(cellKey) => {
-                setError(null);
-                setNotice(null);
-                setHasLocalEdits(true);
-                dispatch({ type: "apply", cellKeys: [cellKey], mode });
-              }}
-              onRangeCell={(cellKey) => {
-                setError(null);
-                setNotice(null);
-                if (!rangeAnchorCellKey) {
-                  setRangeAnchorCellKey(cellKey);
-                  return;
-                }
-                setHasLocalEdits(true);
-                dispatch({
-                  type: "applyRange",
-                  anchorCellKey: rangeAnchorCellKey,
-                  targetCellKey: cellKey,
-                  grid,
-                  mode,
-                });
-                setRangeAnchorCellKey(null);
-                setIsRangeSelectionActive(false);
-              }}
-              onRangeStart={() => setIsRangeSelectionActive(true)}
-              onRangeCancel={() => {
-                setRangeAnchorCellKey(null);
-                setIsRangeSelectionActive(false);
-              }}
-            />
-          </CardContent>
-        </Card>
-
-        <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Response</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!data.membership || !data.membership.displayName ? (
-                <label className="grid gap-2">
-                  <span className="text-sm font-medium text-foreground">
-                    Display name
-                  </span>
-                  <input
-                    className={inputClassName}
-                    value={displayName}
-                    disabled={!canEdit}
-                    aria-invalid={error?.toLowerCase().includes("display name")}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    placeholder="Ada Lovelace"
-                  />
-                </label>
-              ) : (
-                <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
-                  <span className="text-slate-500">Signed in as </span>
-                  <span className="font-medium text-foreground">
-                    {data.membership.displayName || "Anonymous participant"}
-                  </span>
-                </div>
-              )}
-
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <SummaryItem label="Yes" value={summary.yes} />
-                <SummaryItem label="Reluctant" value={summary.reluctant} />
-                <SummaryItem label="No" value={summary.no} />
-                <SummaryItem label="Unset" value={summary.clear} />
-              </dl>
-
-              <div className="grid gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={!canEdit}
-                  onClick={() => applyAllAllowed("yes")}
-                >
-                  <Paintbrush className="size-4" aria-hidden="true" />
-                  Mark all yes
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={!canEdit}
-                  onClick={() => applyAllAllowed("clear")}
-                >
-                  <Eraser className="size-4" aria-hidden="true" />
-                  Clear all
-                </Button>
+      {visibleView === "availability" ? (
+        <div
+          id="availability-view"
+          role="tabpanel"
+          aria-labelledby="availability-tab"
+          className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,330px)]"
+        >
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b border-border">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarDays className="size-5 text-primary" aria-hidden="true" />
+                  Availability Calendar
+                </CardTitle>
+                <AvailabilityBrushControls
+                  mode={mode}
+                  disabled={!canEdit || isSaving}
+                  onModeChange={setMode}
+                />
               </div>
-
-              {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
-              {notice ? <StatusMessage tone="success">{notice}</StatusMessage> : null}
-
-              <Button
-                type="button"
-                className="w-full"
+            </CardHeader>
+            <CardContent className="p-0">
+              <AvailabilityGrid
+                grid={grid}
+                mode={mode}
                 disabled={!canEdit || isSaving}
-                onClick={handleSave}
-              >
-                {isSaving ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Save className="size-4" aria-hidden="true" />
-                )}
-                {membershipToken ? "Save response" : "Join and save"}
-              </Button>
+                responsesByCellKey={paintState.responsesByCellKey}
+                previewCellKeys={paintState.previewCellKeys}
+                rangeAnchorCellKey={rangeAnchorCellKey}
+                isRangeSelectionActive={isRangeSelectionActive}
+                onBegin={(cellKey) => {
+                  setError(null);
+                  setNotice(null);
+                  dispatch({ type: "begin", cellKey, mode });
+                }}
+                onHover={(cellKey) => dispatch({ type: "hover", cellKey, grid })}
+                onCommit={() => dispatch({ type: "commit" })}
+                onCommittedEdit={() => setHasLocalEdits(true)}
+                onCancel={() => dispatch({ type: "cancel" })}
+                onApplyCell={(cellKey) => {
+                  setError(null);
+                  setNotice(null);
+                  setHasLocalEdits(true);
+                  dispatch({ type: "apply", cellKeys: [cellKey], mode });
+                }}
+                onRangeCell={(cellKey) => {
+                  setError(null);
+                  setNotice(null);
+                  if (!rangeAnchorCellKey) {
+                    setRangeAnchorCellKey(cellKey);
+                    return;
+                  }
+                  setHasLocalEdits(true);
+                  dispatch({
+                    type: "applyRange",
+                    anchorCellKey: rangeAnchorCellKey,
+                    targetCellKey: cellKey,
+                    grid,
+                    mode,
+                  });
+                  setRangeAnchorCellKey(null);
+                  setIsRangeSelectionActive(false);
+                }}
+                onRangeStart={() => setIsRangeSelectionActive(true)}
+                onRangeCancel={() => {
+                  setRangeAnchorCellKey(null);
+                  setIsRangeSelectionActive(false);
+                }}
+              />
             </CardContent>
           </Card>
 
-          <MeetingLinksPanel
-            publicParticipantUrl={publicParticipantUrl}
-            personalMembershipUrl={personalMembershipUrl}
-            canShareAdminInvite={canShareAdminInvite}
-            membershipToken={membershipToken ?? null}
-            meetingSlug={meeting.slug}
-            onCreateAdminInviteToken={onCreateAdminInviteToken}
-            onCopyError={() =>
-              setError(
-                "Clipboard access is unavailable. Select the link text to copy it.",
-              )
-            }
-          />
+          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Response</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!data.membership || !data.membership.displayName ? (
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      Display name
+                    </span>
+                    <input
+                      className={inputClassName}
+                      value={displayName}
+                      disabled={!canEdit || isSaving}
+                      aria-invalid={error?.toLowerCase().includes("display name")}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      placeholder="Ada Lovelace"
+                    />
+                  </label>
+                ) : (
+                  <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
+                    <span className="text-slate-500">Signed in as </span>
+                    <span className="font-medium text-foreground">
+                      {data.membership.displayName || "Anonymous participant"}
+                    </span>
+                  </div>
+                )}
 
-          <MembershipIdentityPanel
-            membershipToken={membershipToken ?? undefined}
-            isEmailRecoveryAttached={data.membership?.hasEmailIdentity}
-          />
-        </aside>
-      </div>
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <SummaryItem label="Yes" value={summary.yes} />
+                  <SummaryItem label="If needed" value={summary.reluctant} />
+                  <SummaryItem label="No" value={summary.no} />
+                  <SummaryItem label="Unset" value={summary.clear} />
+                </dl>
 
-      {hasSubmittedAvailability ? null : resultsPanel}
+                <div className="grid gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!canEdit || isSaving}
+                    onClick={() => applyAllAllowed("yes")}
+                  >
+                    <Paintbrush className="size-4" aria-hidden="true" />
+                    Mark all yes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={!canEdit || isSaving}
+                    onClick={() => applyAllAllowed("clear")}
+                  >
+                    <Eraser className="size-4" aria-hidden="true" />
+                    Clear all
+                  </Button>
+                </div>
+
+                {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
+                {notice ? <StatusMessage tone="success">{notice}</StatusMessage> : null}
+
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={!canEdit || isSaving}
+                  onClick={handleSave}
+                >
+                  {isSaving ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Save className="size-4" aria-hidden="true" />
+                  )}
+                  {membershipToken ? "Save response" : "Join and save"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {meetingLinksPanel}
+
+            <MembershipIdentityPanel
+              membershipToken={membershipToken ?? undefined}
+              isEmailRecoveryAttached={data.membership?.hasEmailIdentity}
+            />
+          </aside>
+        </div>
+      ) : data.results ? (
+        <div
+          id="results-view"
+          role="tabpanel"
+          aria-labelledby="results-tab"
+          className="space-y-5"
+        >
+          {resultsPanel}
+          <div className="max-w-lg">{meetingLinksPanel}</div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function MeetingViewTab({
+  id,
+  controls,
+  isActive,
+  icon: Icon,
+  onClick,
+  children,
+}: {
+  id: string;
+  controls: string;
+  isActive: boolean;
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="tab"
+      aria-selected={isActive}
+      aria-controls={controls}
+      className={cn(
+        "flex min-h-11 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        isActive
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-slate-600 hover:bg-surface-muted hover:text-foreground",
+      )}
+      onClick={onClick}
+    >
+      <Icon className="size-4" aria-hidden />
+      <span>{children}</span>
+    </button>
   );
 }
 
@@ -935,7 +1023,7 @@ function MeetingLinksPanel({
         setAdminInviteError(null);
       } catch {
         requestedAdminInviteRef.current = null;
-        setAdminInviteError("Unable to prepare the admin invite link.");
+        setAdminInviteError("Unable to prepare the organizer invite link.");
       } finally {
         setIsPreparingAdminInvite(false);
       }
@@ -985,12 +1073,12 @@ function MeetingLinksPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Meeting Links</CardTitle>
+        <CardTitle>Invite and return links</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {publicParticipantUrl ? (
           <LinkField
-            label="Regular invite link"
+            label="Participant invite"
             value={publicParticipantUrl}
             copied={copiedLink === "public"}
             onCopy={() => copyLink("public", publicParticipantUrl)}
@@ -999,11 +1087,11 @@ function MeetingLinksPanel({
 
         {canShareAdminInvite ? (
           <LinkField
-            label="Admin invite link"
+            label="Organizer invite"
             value={adminInviteUrl ?? ""}
             copied={copiedLink === "adminInvite"}
             disabled={!adminInviteUrl}
-            placeholder="Preparing admin invite..."
+            placeholder="Preparing organizer invite..."
             onCopy={() => copyLink("adminInvite", adminInviteUrl)}
           />
         ) : null}
@@ -1020,7 +1108,7 @@ function MeetingLinksPanel({
               {isPreparingAdminInvite ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : null}
-              Retry admin invite
+              Retry organizer invite
             </Button>
           </div>
         ) : null}
@@ -1028,10 +1116,10 @@ function MeetingLinksPanel({
         {personalMembershipUrl ? (
           <div className="border-t border-border pt-4">
             <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
-              Your private return link is only for you. Do not share it as an invite.
+              Keep this link private. It gives access to your response and meeting tools.
             </div>
             <LinkField
-              label="Private return link"
+              label="Your private link"
               value={personalMembershipUrl}
               copied={copiedLink === "personal"}
               onCopy={() => copyLink("personal", personalMembershipUrl)}
@@ -1141,7 +1229,7 @@ function AvailabilityGrid({
   if (grid.participantCellKeys.size === 0) {
     return (
       <div className="p-5 text-sm leading-6 text-slate-600">
-        No admin-allowed time cells are available for participants yet.
+        The organizer has not added any available times yet.
       </div>
     );
   }
@@ -1451,7 +1539,7 @@ function AvailabilityBrushControls({
     icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   }[] = [
     { mode: "yes", label: "Yes", icon: Paintbrush },
-    { mode: "reluctant", label: "Reluctant", icon: Smile },
+    { mode: "reluctant", label: "If needed", icon: Smile },
     { mode: "no", label: "No", icon: ThumbsDown },
     { mode: "clear", label: "Clear", icon: Eraser },
   ];

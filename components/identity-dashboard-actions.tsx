@@ -25,14 +25,14 @@ export function RecoverMembershipLinkButton({ membershipId }: { membershipId: st
         membershipUrl?: string;
       };
       if (!response.ok || !body.membershipUrl) {
-        throw new Error(body.error ?? "Unable to recover a membership link.");
+        throw new Error(body.error ?? "Unable to restore access to this meeting.");
       }
       setMembershipUrl(body.membershipUrl);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to recover a membership link.",
+          : "Unable to restore access to this meeting.",
       );
     } finally {
       setIsBusy(false);
@@ -59,14 +59,14 @@ export function RecoverMembershipLinkButton({ membershipId }: { membershipId: st
             className={`${inputClassName} min-w-0`}
             readOnly
             value={membershipUrl}
-            aria-label="Recovered membership link"
+            aria-label="Private meeting link"
           />
           <Button
             type="button"
             variant="secondary"
             size="icon"
             className="shrink-0"
-            aria-label="Copy recovered membership link"
+            aria-label="Copy private meeting link"
             onClick={copyLink}
           >
             {copied ? (
@@ -83,7 +83,7 @@ export function RecoverMembershipLinkButton({ membershipId }: { membershipId: st
           ) : (
             <KeyRound className="size-4" aria-hidden="true" />
           )}
-          Recover private link
+          Get private link
         </Button>
       )}
       {error ? (

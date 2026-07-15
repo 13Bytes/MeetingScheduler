@@ -20,7 +20,7 @@ export default async function MeetingPollPage({
           icon={UsersRound}
           eyebrow="Public meeting"
           title="Participant availability"
-          description={`Set NEXT_PUBLIC_CONVEX_URL to load ${meetingSlug} and save participant availability.`}
+          description="This meeting is temporarily unavailable. Please try again later."
         />
       )}
     </AppShell>

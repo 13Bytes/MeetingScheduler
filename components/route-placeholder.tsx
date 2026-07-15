@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function RoutePlaceholder({
   icon: Icon,
-  eyebrow = "Foundation",
+  eyebrow = "Feature",
   title,
   description,
 }: {

@@ -4,7 +4,7 @@ import { ConvexClientProvider } from "@/components/providers/convex-client-provi
 
 export const metadata: Metadata = {
   title: "Meeting Scheduler",
-  description: "A collaborative scheduling foundation for Doodle-style meeting polls.",
+  description: "Find the best meeting time for everyone, without the back-and-forth.",
 };
 
 export default function RootLayout({

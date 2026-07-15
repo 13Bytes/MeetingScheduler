@@ -60,8 +60,8 @@ export function renderMeetingLifecycleEmail(args: {
       ? `Selected time: ${formatSlot(args.finalizedSlot)}`
       : undefined;
   const lead = isFinalized
-    ? "An admin finalized this poll."
-    : "An admin reopened this poll for more edits.";
+    ? "An organizer finalized this meeting."
+    : "An organizer reopened this meeting for more responses.";
   const text = [
     subject,
     "",
@@ -69,7 +69,7 @@ export function renderMeetingLifecycleEmail(args: {
     ...(slotText ? [slotText] : []),
     "",
     `Open meeting: ${args.meetingUrl}`,
-    `Recovery dashboard: ${args.dashboardUrl}`,
+    `View all meetings: ${args.dashboardUrl}`,
   ].join("\n");
 
   return {
@@ -81,7 +81,7 @@ export function renderMeetingLifecycleEmail(args: {
       `<p>${escapeHtml(lead)}</p>`,
       slotText ? `<p>${escapeHtml(slotText)}</p>` : "",
       `<p><a href="${escapeHtml(args.meetingUrl)}">Open meeting</a></p>`,
-      `<p><a href="${escapeHtml(args.dashboardUrl)}">Recovery dashboard</a></p>`,
+      `<p><a href="${escapeHtml(args.dashboardUrl)}">View all meetings</a></p>`,
     ].join(""),
   };
 }
