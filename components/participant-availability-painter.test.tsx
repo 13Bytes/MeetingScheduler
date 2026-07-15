@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ConnectedPublicParticipantMeeting,
@@ -193,11 +193,11 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
-      "http://localhost:3000/m/team-planning",
-    );
-    expect(screen.queryByRole("textbox", { name: /organizer invite/i })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: /your private link/i })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /copy participant invite/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /organizer invite/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /private return link/i })).toBeNull();
   });
 
   it("uses a client-side admin invite token when joining from an invite link", async () => {
@@ -300,12 +300,12 @@ describe("ParticipantAvailabilityPainter", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /best times/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: /results & shortlist/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^results$/i }));
 
     expect(screen.getByRole("heading", { name: /best times/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /availability calendar/i })).toBeNull();
     expect(
-      screen.getByRole("textbox", { name: /participant invite/i }),
+      screen.getByRole("button", { name: /copy participant invite/i }),
     ).toBeInTheDocument();
   });
 
@@ -335,7 +335,7 @@ describe("ParticipantAvailabilityPainter", () => {
       screen.getByRole("heading", { name: /availability calendar/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("tab", { name: /results & shortlist/i }),
+      screen.queryByRole("tab", { name: /^results$/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -376,7 +376,7 @@ describe("ParticipantAvailabilityPainter", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /best times/i })).toBeNull();
     expect(
-      screen.getByRole("textbox", { name: /participant invite/i }),
+      screen.getByRole("button", { name: /copy participant invite/i }),
     ).toBeInTheDocument();
   });
 
@@ -393,14 +393,61 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
-      "http://localhost:3000/m/team-planning",
+    const participantLink = screen.getByRole("button", {
+      name: /copy participant invite/i,
+    });
+    expect(participantLink).toBeInTheDocument();
+    expect(participantLink.querySelector("svg")).toHaveClass("lucide-share-2");
+    expect(screen.queryByRole("button", { name: /organizer invite/i })).toBeNull();
+    const privateLink = screen.getByRole("button", {
+      name: /copy private return link/i,
+    });
+    expect(privateLink).toHaveAttribute(
+      "title",
+      expect.stringMatching(/keep this link private/i),
     );
-    expect(screen.queryByRole("textbox", { name: /organizer invite/i })).toBeNull();
-    expect(screen.getByRole("textbox", { name: /your private link/i })).toHaveValue(
-      "http://localhost:3000/join/member-secret-token",
-    );
-    expect(screen.getByText(/keep this link private/i)).toBeInTheDocument();
+    expect(privateLink.querySelector("svg")).toHaveClass("lucide-clipboard");
+  });
+
+  it("restores the share icon after briefly confirming a copied link", async () => {
+    vi.useFakeTimers();
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    try {
+      render(
+        <ParticipantAvailabilityPainter
+          data={baseData}
+          onCreateMembership={vi.fn()}
+          onSaveAvailability={vi.fn()}
+          baseDate={new Date("2026-06-25T06:00:00.000Z")}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /copy participant invite/i }));
+      await act(async () => Promise.resolve());
+
+      expect(writeText).toHaveBeenCalledWith("http://localhost:3000/m/team-planning");
+      expect(screen.getByRole("button", { name: /copied participant invite/i })).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(2500));
+
+      const restoredButton = screen.getByRole("button", {
+        name: /copy participant invite/i,
+      });
+      expect(restoredButton.querySelector("svg")).toHaveClass("lucide-share-2");
+    } finally {
+      vi.useRealTimers();
+      Object.defineProperty(
+        navigator,
+        "clipboard",
+        originalClipboard ?? { configurable: true, value: undefined },
+      );
+    }
   });
 
   it("shows an admin invite link for role-based admin users", async () => {
@@ -428,15 +475,15 @@ describe("ParticipantAvailabilityPainter", () => {
     await waitFor(() =>
       expect(onCreateAdminInviteToken).toHaveBeenCalledWith("admin-secret-token"),
     );
-    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
-      "http://localhost:3000/m/team-planning",
-    );
-    expect(screen.getByRole("textbox", { name: /organizer invite/i })).toHaveValue(
-      "http://localhost:3000/m/team-planning#adminInviteToken=admin-invite-secret",
-    );
-    expect(screen.getByRole("textbox", { name: /your private link/i })).toHaveValue(
-      "http://localhost:3000/join/admin-secret-token",
-    );
+    expect(
+      screen.getByRole("button", { name: /copy participant invite/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy organizer invite/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy private return link/i }),
+    ).toBeInTheDocument();
   });
 
   it("does not show a separate admin invite when everyone is admin", () => {
@@ -458,10 +505,10 @@ describe("ParticipantAvailabilityPainter", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox", { name: /participant invite/i })).toHaveValue(
-      "http://localhost:3000/m/team-planning",
-    );
-    expect(screen.queryByRole("textbox", { name: /organizer invite/i })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /copy participant invite/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /organizer invite/i })).toBeNull();
   });
 
   it("creates a membership before the first persisted availability write", async () => {
@@ -500,10 +547,8 @@ describe("ParticipantAvailabilityPainter", () => {
       ]),
     );
     expect(
-      (await screen.findByRole("textbox", { name: /^your private link$/i })).getAttribute(
-        "value",
-      ),
-    ).toContain("/join/member-secret-token");
+      await screen.findByRole("button", { name: /copy private return link/i }),
+    ).toBeInTheDocument();
     expect(onMembershipTokenAvailable).toHaveBeenCalledWith(
       "member-secret-token",
       "team-planning",
@@ -693,7 +738,7 @@ describe("ParticipantAvailabilityPainter", () => {
     expect(
       await screen.findByRole("heading", { name: /best times/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /results & shortlist/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /^results$/i })).toHaveAttribute(
       "aria-selected",
       "true",
     );

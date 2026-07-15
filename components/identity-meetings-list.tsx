@@ -1,4 +1,4 @@
-import { CalendarDays } from "lucide-react";
+import { ArrowRight, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { RecoverMembershipLinkButton } from "@/components/identity-dashboard-actions";
 import { Badge } from "@/components/ui/badge";
@@ -86,9 +86,10 @@ export function IdentityMeetingsList({
                 </p>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                <Button asChild variant="ghost">
+                <Button asChild className="w-full sm:w-auto">
                   <Link href={routes.meetingPoll(membership.meeting.slug)}>
                     Open meeting
+                    <ArrowRight className="size-4" aria-hidden="true" />
                   </Link>
                 </Button>
               </div>

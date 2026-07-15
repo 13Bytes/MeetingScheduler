@@ -11,12 +11,21 @@ import {
   Paintbrush,
   Save,
   Settings2,
+  Share2,
   Smile,
   ThumbsDown,
 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  HTMLProps,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { api } from "@/convex/_generated/api";
 import { AdminCalendarPainter } from "@/components/admin-calendar-painter";
 import { MembershipIdentityPanel } from "@/components/membership-identity-panel";
@@ -651,7 +660,7 @@ export function ParticipantAvailabilityPainter({
     />
   ) : null;
 
-  const meetingLinksPanel = (
+  const meetingLinks = (
     <MeetingLinksPanel
       publicParticipantUrl={publicParticipantUrl}
       personalMembershipUrl={personalMembershipUrl}
@@ -666,14 +675,14 @@ export function ParticipantAvailabilityPainter({
   );
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="grid gap-3">
+    <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <section className="grid gap-3 sm:col-start-1 sm:row-start-1">
         <div className="grid gap-2">
-          <div className="flex flex-row gap-2 items-center">
-            <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
-              {meeting.title}
-            </h1>
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="min-w-0 text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
+                {meeting.title}
+              </h1>
               {meeting.lifecycleState === "finalized" ? (
                 <Badge>Finalized</Badge>
               ) : (
@@ -693,214 +702,215 @@ export function ParticipantAvailabilityPainter({
         </div>
       </section>
 
-      {meeting.lifecycleState === "finalized" ? (
-        <PermissionPanel
-          title="Finalized meeting"
-          description="Responses are closed. An organizer can reopen the meeting if plans change."
-        />
-      ) : null}
-      <p className="sr-only" aria-live="polite">
-        {`${summary.yes} yes, ${summary.reluctant} if needed, ${summary.no} no responses selected.`}
-      </p>
+      <div className="flex flex-col gap-6 sm:col-span-2 sm:row-start-2">
+        {meeting.lifecycleState === "finalized" ? (
+          <PermissionPanel
+            title="Finalized meeting"
+            description="Responses are closed. An organizer can reopen the meeting if plans change."
+          />
+        ) : null}
+        <p className="sr-only" aria-live="polite">
+          {`${summary.yes} yes, ${summary.reluctant} if needed, ${summary.no} no responses selected.`}
+        </p>
 
-      <nav
-        className="order-first sticky top-0 z-20 rounded-lg border border-border bg-surface/95 p-1 shadow-sm backdrop-blur sm:order-none"
-        aria-label="Meeting sections"
-      >
-        <div
-          className={cn("grid gap-1", data.results ? "grid-cols-2" : "grid-cols-1")}
-          role="tablist"
+        <nav
+          className="order-first sticky top-0 z-20 rounded-lg border border-border bg-surface/95 p-1 shadow-sm backdrop-blur sm:order-none"
+          aria-label="Meeting sections"
         >
-          <MeetingViewTab
-            id="availability-tab"
-            controls="availability-view"
-            isActive={visibleView === "availability"}
-            icon={CalendarDays}
-            onClick={() => setActiveView("availability")}
+          <div
+            className={cn("grid gap-1", data.results ? "grid-cols-2" : "grid-cols-1")}
+            role="tablist"
           >
-            Availability
-          </MeetingViewTab>
-          {data.results ? (
             <MeetingViewTab
-              id="results-tab"
-              controls="results-view"
-              isActive={visibleView === "results"}
-              icon={BarChart3}
-              onClick={() => setActiveView("results")}
+              id="availability-tab"
+              controls="availability-view"
+              isActive={visibleView === "availability"}
+              icon={CalendarDays}
+              onClick={() => setActiveView("availability")}
             >
-              Results &amp; shortlist
+              Availability
             </MeetingViewTab>
-          ) : null}
-        </div>
-      </nav>
+            {data.results ? (
+              <MeetingViewTab
+                id="results-tab"
+                controls="results-view"
+                isActive={visibleView === "results"}
+                icon={BarChart3}
+                onClick={() => setActiveView("results")}
+              >
+                Results
+              </MeetingViewTab>
+            ) : null}
+          </div>
+        </nav>
 
-      {visibleView === "availability" ? (
-        <div
-          id="availability-view"
-          role="tabpanel"
-          aria-labelledby="availability-tab"
-          className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,330px)]"
-        >
-          <Card className="overflow-hidden">
-            <CardHeader className="border-b border-border">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <CalendarDays className="size-5 text-primary" aria-hidden="true" />
-                  Availability Calendar
-                </CardTitle>
-                <AvailabilityBrushControls
+        {visibleView === "availability" ? (
+          <div
+            id="availability-view"
+            role="tabpanel"
+            aria-labelledby="availability-tab"
+            className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,330px)]"
+          >
+            <Card className="overflow-hidden">
+              <CardHeader className="border-b border-border">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarDays className="size-5 text-primary" aria-hidden="true" />
+                    Availability Calendar
+                  </CardTitle>
+                  <AvailabilityBrushControls
+                    mode={mode}
+                    disabled={!canEdit || isSaving}
+                    onModeChange={setMode}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <AvailabilityGrid
+                  grid={grid}
                   mode={mode}
                   disabled={!canEdit || isSaving}
-                  onModeChange={setMode}
+                  responsesByCellKey={paintState.responsesByCellKey}
+                  previewCellKeys={paintState.previewCellKeys}
+                  rangeAnchorCellKey={rangeAnchorCellKey}
+                  isRangeSelectionActive={isRangeSelectionActive}
+                  onBegin={(cellKey) => {
+                    setError(null);
+                    setNotice(null);
+                    dispatch({ type: "begin", cellKey, mode });
+                  }}
+                  onHover={(cellKey) => dispatch({ type: "hover", cellKey, grid })}
+                  onCommit={() => dispatch({ type: "commit" })}
+                  onCommittedEdit={() => setHasLocalEdits(true)}
+                  onCancel={() => dispatch({ type: "cancel" })}
+                  onApplyCell={(cellKey) => {
+                    setError(null);
+                    setNotice(null);
+                    setHasLocalEdits(true);
+                    dispatch({ type: "apply", cellKeys: [cellKey], mode });
+                  }}
+                  onRangeCell={(cellKey) => {
+                    setError(null);
+                    setNotice(null);
+                    if (!rangeAnchorCellKey) {
+                      setRangeAnchorCellKey(cellKey);
+                      return;
+                    }
+                    setHasLocalEdits(true);
+                    dispatch({
+                      type: "applyRange",
+                      anchorCellKey: rangeAnchorCellKey,
+                      targetCellKey: cellKey,
+                      grid,
+                      mode,
+                    });
+                    setRangeAnchorCellKey(null);
+                    setIsRangeSelectionActive(false);
+                  }}
+                  onRangeStart={() => setIsRangeSelectionActive(true)}
+                  onRangeCancel={() => {
+                    setRangeAnchorCellKey(null);
+                    setIsRangeSelectionActive(false);
+                  }}
                 />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <AvailabilityGrid
-                grid={grid}
-                mode={mode}
-                disabled={!canEdit || isSaving}
-                responsesByCellKey={paintState.responsesByCellKey}
-                previewCellKeys={paintState.previewCellKeys}
-                rangeAnchorCellKey={rangeAnchorCellKey}
-                isRangeSelectionActive={isRangeSelectionActive}
-                onBegin={(cellKey) => {
-                  setError(null);
-                  setNotice(null);
-                  dispatch({ type: "begin", cellKey, mode });
-                }}
-                onHover={(cellKey) => dispatch({ type: "hover", cellKey, grid })}
-                onCommit={() => dispatch({ type: "commit" })}
-                onCommittedEdit={() => setHasLocalEdits(true)}
-                onCancel={() => dispatch({ type: "cancel" })}
-                onApplyCell={(cellKey) => {
-                  setError(null);
-                  setNotice(null);
-                  setHasLocalEdits(true);
-                  dispatch({ type: "apply", cellKeys: [cellKey], mode });
-                }}
-                onRangeCell={(cellKey) => {
-                  setError(null);
-                  setNotice(null);
-                  if (!rangeAnchorCellKey) {
-                    setRangeAnchorCellKey(cellKey);
-                    return;
-                  }
-                  setHasLocalEdits(true);
-                  dispatch({
-                    type: "applyRange",
-                    anchorCellKey: rangeAnchorCellKey,
-                    targetCellKey: cellKey,
-                    grid,
-                    mode,
-                  });
-                  setRangeAnchorCellKey(null);
-                  setIsRangeSelectionActive(false);
-                }}
-                onRangeStart={() => setIsRangeSelectionActive(true)}
-                onRangeCancel={() => {
-                  setRangeAnchorCellKey(null);
-                  setIsRangeSelectionActive(false);
-                }}
-              />
-            </CardContent>
-          </Card>
-
-          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Response</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!data.membership || !data.membership.displayName ? (
-                  <label className="grid gap-2">
-                    <span className="text-sm font-medium text-foreground">
-                      Display name
-                    </span>
-                    <input
-                      className={inputClassName}
-                      value={displayName}
-                      disabled={!canEdit || isSaving}
-                      aria-invalid={error?.toLowerCase().includes("display name")}
-                      onChange={(event) => setDisplayName(event.target.value)}
-                      placeholder="Ada Lovelace"
-                    />
-                  </label>
-                ) : (
-                  <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
-                    <span className="text-slate-500">Signed in as </span>
-                    <span className="font-medium text-foreground">
-                      {data.membership.displayName || "Anonymous participant"}
-                    </span>
-                  </div>
-                )}
-
-                <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <SummaryItem label="Yes" value={summary.yes} />
-                  <SummaryItem label="If needed" value={summary.reluctant} />
-                  <SummaryItem label="No" value={summary.no} />
-                  <SummaryItem label="Unset" value={summary.clear} />
-                </dl>
-
-                <div className="grid gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={!canEdit || isSaving}
-                    onClick={() => applyAllAllowed("yes")}
-                  >
-                    <Paintbrush className="size-4" aria-hidden="true" />
-                    Mark all yes
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={!canEdit || isSaving}
-                    onClick={() => applyAllAllowed("clear")}
-                  >
-                    <Eraser className="size-4" aria-hidden="true" />
-                    Clear all
-                  </Button>
-                </div>
-
-                {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
-                {notice ? <StatusMessage tone="success">{notice}</StatusMessage> : null}
-
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={!canEdit || isSaving}
-                  onClick={handleSave}
-                >
-                  {isSaving ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Save className="size-4" aria-hidden="true" />
-                  )}
-                  {membershipToken ? "Save response" : "Join and save"}
-                </Button>
               </CardContent>
             </Card>
 
-            {meetingLinksPanel}
+            <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Response</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!data.membership || !data.membership.displayName ? (
+                    <label className="grid gap-2">
+                      <span className="text-sm font-medium text-foreground">
+                        Display name
+                      </span>
+                      <input
+                        className={inputClassName}
+                        value={displayName}
+                        disabled={!canEdit || isSaving}
+                        aria-invalid={error?.toLowerCase().includes("display name")}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                        placeholder="Ada Lovelace"
+                      />
+                    </label>
+                  ) : (
+                    <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
+                      <span className="text-slate-500">Signed in as </span>
+                      <span className="font-medium text-foreground">
+                        {data.membership.displayName || "Anonymous participant"}
+                      </span>
+                    </div>
+                  )}
 
-            <MembershipIdentityPanel
-              membershipToken={membershipToken ?? undefined}
-              isEmailRecoveryAttached={data.membership?.hasEmailIdentity}
-            />
-          </aside>
-        </div>
-      ) : data.results ? (
-        <div
-          id="results-view"
-          role="tabpanel"
-          aria-labelledby="results-tab"
-          className="space-y-5"
-        >
-          {resultsPanel}
-          <div className="max-w-lg">{meetingLinksPanel}</div>
-        </div>
-      ) : null}
+                  <dl className="grid grid-cols-2 gap-3 text-sm">
+                    <SummaryItem label="Yes" value={summary.yes} />
+                    <SummaryItem label="If needed" value={summary.reluctant} />
+                    <SummaryItem label="No" value={summary.no} />
+                    <SummaryItem label="Unset" value={summary.clear} />
+                  </dl>
+
+                  <div className="grid gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={!canEdit || isSaving}
+                      onClick={() => applyAllAllowed("yes")}
+                    >
+                      <Paintbrush className="size-4" aria-hidden="true" />
+                      Mark all yes
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={!canEdit || isSaving}
+                      onClick={() => applyAllAllowed("clear")}
+                    >
+                      <Eraser className="size-4" aria-hidden="true" />
+                      Clear all
+                    </Button>
+                  </div>
+
+                  {error ? <StatusMessage tone="error">{error}</StatusMessage> : null}
+                  {notice ? <StatusMessage tone="success">{notice}</StatusMessage> : null}
+
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={!canEdit || isSaving}
+                    onClick={handleSave}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Save className="size-4" aria-hidden="true" />
+                    )}
+                    {membershipToken ? "Save response" : "Join and save"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <MembershipIdentityPanel
+                membershipToken={membershipToken ?? undefined}
+                isEmailRecoveryAttached={data.membership?.hasEmailIdentity}
+              />
+            </aside>
+          </div>
+        ) : data.results ? (
+          <div
+            id="results-view"
+            role="tabpanel"
+            aria-labelledby="results-tab"
+            className="space-y-5"
+          >
+            {resultsPanel}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="sm:col-start-2 sm:row-start-1 sm:self-start">{meetingLinks}</div>
     </div>
   );
 }
@@ -1052,6 +1062,15 @@ function MeetingLinksPanel({
     prepareAdminInvite,
   ]);
 
+  useEffect(() => {
+    if (!copiedLink) {
+      return;
+    }
+
+    const resetCopiedState = window.setTimeout(() => setCopiedLink(null), 2500);
+    return () => window.clearTimeout(resetCopiedState);
+  }, [copiedLink]);
+
   const adminInviteUrl =
     adminInvite?.membershipToken === membershipToken ? adminInvite.url : null;
 
@@ -1071,110 +1090,102 @@ function MeetingLinksPanel({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Invite and return links</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {publicParticipantUrl ? (
-          <LinkField
-            label="Participant invite"
-            value={publicParticipantUrl}
-            copied={copiedLink === "public"}
-            onCopy={() => copyLink("public", publicParticipantUrl)}
-          />
-        ) : null}
+    <div
+      className="flex w-full flex-col items-stretch gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center"
+      role="group"
+      aria-label="Meeting links"
+    >
+      <span className="mr-0.5 text-sm font-medium text-black">Invitation Links to copy</span>
+      {publicParticipantUrl ? (
+        <CompactLinkButton
+          label="Participant invite"
+          copied={copiedLink === "public"}
+          onCopy={() => copyLink("public", publicParticipantUrl)}
+          className="border-transparent bg-accent text-accent-foreground hover:bg-[#0f766d94]"
+        />
+      ) : null}
 
-        {canShareAdminInvite ? (
-          <LinkField
-            label="Organizer invite"
-            value={adminInviteUrl ?? ""}
-            copied={copiedLink === "adminInvite"}
-            disabled={!adminInviteUrl}
-            placeholder="Preparing organizer invite..."
-            onCopy={() => copyLink("adminInvite", adminInviteUrl)}
-          />
-        ) : null}
+      {canShareAdminInvite ? (
+        <CompactLinkButton
+          label="Organizer invite"
+          copied={copiedLink === "adminInvite"}
+          disabled={!adminInviteUrl}
+          onCopy={() => copyLink("adminInvite", adminInviteUrl)}
+        />
+      ) : null}
 
-        {canShareAdminInvite && adminInviteError ? (
-          <div className="grid gap-2">
-            <StatusMessage tone="error">{adminInviteError}</StatusMessage>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={isPreparingAdminInvite}
-              onClick={() => void prepareAdminInvite({ force: true })}
-            >
-              {isPreparingAdminInvite ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              ) : null}
-              Retry organizer invite
-            </Button>
-          </div>
-        ) : null}
+      {canShareAdminInvite && adminInviteError ? (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-amber-800" role="alert">
+            Organizer link unavailable.
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="px-2"
+            disabled={isPreparingAdminInvite}
+            onClick={() => void prepareAdminInvite({ force: true })}
+          >
+            {isPreparingAdminInvite ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
-        {personalMembershipUrl ? (
-          <div className="border-t border-border pt-4">
-            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
-              Keep this link private. It gives access to your response and meeting tools.
-            </div>
-            <LinkField
-              label="Your private link"
-              value={personalMembershipUrl}
-              copied={copiedLink === "personal"}
-              onCopy={() => copyLink("personal", personalMembershipUrl)}
-            />
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+      {personalMembershipUrl ? (
+        <CompactLinkButton
+          label="Private return link"
+          copied={copiedLink === "personal"}
+          onCopy={() => copyLink("personal", personalMembershipUrl)}
+          privateLink
+        />
+      ) : null}
+    </div>
   );
 }
 
-function LinkField({
+function CompactLinkButton({
   label,
-  value,
   copied,
   onCopy,
   disabled = false,
-  placeholder,
+  privateLink = false,
+  className = "",
 }: {
-  label: string;
-  value: string;
+    label: string;
   copied: boolean;
   onCopy: () => void;
   disabled?: boolean;
-  placeholder?: string;
+    privateLink?: boolean;
+    className?: HTMLProps<HTMLElement>["className"];
 }) {
   return (
-    <div className="grid gap-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      <div className="flex min-w-0 gap-2">
-        <input
-          className={cn(inputClassName, "min-w-0")}
-          readOnly
-          disabled={disabled}
-          value={value}
-          placeholder={placeholder}
-          aria-label={label}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          className="shrink-0"
-          aria-label={`Copy ${label}`}
-          disabled={disabled}
-          onClick={onCopy}
-        >
-          {copied ? (
-            <Check className="size-4 text-accent" aria-hidden="true" />
-          ) : (
-            <Clipboard className="size-4" aria-hidden="true" />
-          )}
-        </Button>
-      </div>
-    </div>
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      className={cn("w-full justify-start px-2.5 sm:w-auto sm:justify-center", className)}
+      aria-label={`${copied ? "Copied" : "Copy"} ${label}`}
+      title={
+        privateLink
+          ? "Keep this link private; it gives access to your response."
+          : undefined
+      }
+      disabled={disabled}
+      onClick={onCopy}
+    >
+      {copied ? (
+        <Check className="size-3.5 text-accent" aria-hidden="true" />
+      ) : privateLink ? (
+        <Clipboard className="size-3.5" aria-hidden="true" />
+      ) : (
+        <Share2 className="size-3.5" aria-hidden="true" />
+      )}
+      <span>{copied ? "Copied" : label.replace(" invite", "")}</span>
+    </Button>
   );
 }
 

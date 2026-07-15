@@ -14,6 +14,9 @@ describe("routes", () => {
   it("encodes dynamic route segments", () => {
     expect(routes.meetingPoll("team planning/Q3")).toBe("/m/team%20planning%2FQ3");
     expect(routes.membershipLink("member secret/1")).toBe("/join/member%20secret%2F1");
+    expect(routes.createdMeetingHandoff("team planning/Q3", "admin secret/1")).toBe(
+      "/new/created/team%20planning%2FQ3/admin%20secret%2F1",
+    );
     expect(routes.adminInvite("team planning/Q3", "admin invite/1")).toBe(
       "/m/team%20planning%2FQ3#adminInviteToken=admin+invite%2F1",
     );
@@ -42,6 +45,7 @@ describe("routes", () => {
     expect(routeMap.map((route) => route.path)).toEqual([
       "/",
       "/new",
+      "/new/created/[meetingSlug]/[adminMembershipToken]",
       "/identity",
       "/identity/dashboard",
       "/m/[meetingSlug]",

@@ -21,7 +21,7 @@ import {
   validatePaintedRanges,
   type PaintMode,
 } from "@/lib/admin-calendar-painter";
-import { buildCreatedMeetingLinks } from "@/lib/routes";
+import { buildAbsoluteAppUrl, routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { BrushControls, CalendarPaintGrid } from "@/components/calendar-paint-grid";
 import { Button } from "@/components/ui/button";
@@ -251,15 +251,14 @@ export function NewMeetingForm({
           allowedTimeRanges,
         },
       });
-      const links = buildCreatedMeetingLinks({
-        origin: window.location.origin,
-        meetingSlug: result.slug,
-        adminMembershipToken: result.adminMembershipToken,
-      });
+      const handoffUrl = buildAbsoluteAppUrl(
+        routes.createdMeetingHandoff(result.slug, result.adminMembershipToken),
+        window.location.origin,
+      );
       if (onCreatedRedirect) {
-        onCreatedRedirect(links.adminMembershipUrl);
+        onCreatedRedirect(handoffUrl);
       } else {
-        assignLocation(links.adminMembershipUrl);
+        assignLocation(handoffUrl);
       }
     } catch (caughtError) {
       setError(

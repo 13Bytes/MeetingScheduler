@@ -7,7 +7,7 @@ describe("NewMeetingForm", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates a meeting and redirects to the personal admin link", async () => {
+  it("creates a meeting and redirects to the organizer handoff", async () => {
     const createMeeting = vi.fn().mockResolvedValue({
       slug: "team-planning",
       adminMembershipToken: "admin-secret",
@@ -43,7 +43,7 @@ describe("NewMeetingForm", () => {
 
     await waitFor(() =>
       expect(onCreatedRedirect).toHaveBeenCalledWith(
-        "http://localhost:3000/join/admin-secret",
+        "http://localhost:3000/new/created/team-planning/admin-secret",
       ),
     );
   });
@@ -72,7 +72,7 @@ describe("NewMeetingForm", () => {
     );
   });
 
-  it("uses window.location.assign when no redirect callback is provided", async () => {
+  it("uses window.location.assign for the organizer handoff", async () => {
     const createMeeting = vi.fn().mockResolvedValue({
       slug: "team-planning",
       adminMembershipToken: "admin-secret",
@@ -87,7 +87,9 @@ describe("NewMeetingForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
 
     await waitFor(() =>
-      expect(assign).toHaveBeenCalledWith("http://localhost:3000/join/admin-secret"),
+      expect(assign).toHaveBeenCalledWith(
+        "http://localhost:3000/new/created/team-planning/admin-secret",
+      ),
     );
   });
 

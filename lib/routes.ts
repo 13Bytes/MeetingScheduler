@@ -4,6 +4,8 @@ export const routes = {
   identity: "/identity",
   identityDashboard: "/identity/dashboard",
   meetingPoll: (meetingSlug: string) => `/m/${encodeURIComponent(meetingSlug)}`,
+  createdMeetingHandoff: (meetingSlug: string, adminMembershipToken: string) =>
+    `/new/created/${encodeURIComponent(meetingSlug)}/${encodeURIComponent(adminMembershipToken)}`,
   adminInvite: (meetingSlug: string, adminInviteToken: string) => {
     const params = new URLSearchParams({ adminInviteToken });
     return `/m/${encodeURIComponent(meetingSlug)}#${params.toString()}`;
@@ -51,6 +53,10 @@ export const routeMap = [
   {
     path: routes.newMeeting,
     purpose: "Create a meeting without an account.",
+  },
+  {
+    path: "/new/created/[meetingSlug]/[adminMembershipToken]",
+    purpose: "Show a new organizer the meeting links before entering the meeting.",
   },
   {
     path: routes.identity,
