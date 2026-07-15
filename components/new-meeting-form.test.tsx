@@ -103,7 +103,7 @@ describe("NewMeetingForm", () => {
       target: { value: "45" },
     });
     fireEvent.change(screen.getByLabelText("Granularity"), {
-      target: { value: "30" },
+      target: { value: "60" },
     });
     fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
 
@@ -154,6 +154,39 @@ describe("NewMeetingForm", () => {
     expect(screen.getAllByRole("gridcell", { selected: true })[0]).toHaveClass(
       "bg-blue-500",
     );
+  });
+
+  it("uses roving focus for exact-time calendar cells", () => {
+    render(<NewMeetingForm />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+
+    const cells = screen.getAllByRole("gridcell");
+    expect(cells.filter((cell) => cell.tabIndex === 0)).toHaveLength(1);
+    cells[0].focus();
+    fireEvent.keyDown(cells[0], { key: "ArrowRight" });
+
+    expect(cells[1]).toHaveFocus();
+    expect(cells[0]).toHaveAttribute("tabindex", "-1");
+    expect(cells[1]).toHaveAttribute("tabindex", "0");
+  });
+
+  it("rejects oversized custom ranges when the Constraint Calendar is enabled", () => {
+    const createMeeting = vi.fn();
+    render(<NewMeetingForm createMeeting={createMeeting} />);
+
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Planning" } });
+    fireEvent.click(screen.getByRole("radio", { name: /custom range/i }));
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-02-12" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
+
+    expect(createMeeting).not.toHaveBeenCalled();
+    expect(screen.getByText(/custom range cannot exceed 42 days/i)).toBeInTheDocument();
   });
 
   it("submits exact times painted during creation", async () => {

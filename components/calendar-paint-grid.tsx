@@ -2,7 +2,7 @@
 
 import { Eraser, MousePointer2, Paintbrush } from "lucide-react";
 import type React from "react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type {
   CalendarGrid,
   CalendarGridCell,
@@ -36,6 +36,12 @@ export function CalendarPaintGrid({
   ariaLabel?: string;
 }) {
   const columnTemplate = `76px repeat(${grid.days.length}, minmax(64px, 1fr))`;
+  const [activeCellKey, setActiveCellKey] = useState(
+    () => grid.orderedCells[0]?.key ?? null,
+  );
+  const effectiveActiveCellKey = grid.cellsByKey.has(activeCellKey ?? "")
+    ? activeCellKey
+    : (grid.orderedCells[0]?.key ?? null);
   return (
     <div
       className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
@@ -75,10 +81,12 @@ export function CalendarPaintGrid({
             disabled={disabled}
             allowedCellKeys={allowedCellKeys}
             previewCellKeys={previewCellKeys}
+            activeCellKey={effectiveActiveCellKey}
             onBegin={onBegin}
             onHover={onHover}
             onCommit={onCommit}
             onApplyCell={onApplyCell}
+            onActiveCellChange={setActiveCellKey}
           />
         ))}
       </div>
@@ -93,10 +101,12 @@ function CalendarRow({
   disabled,
   allowedCellKeys,
   previewCellKeys,
+  activeCellKey,
   onBegin,
   onHover,
   onCommit,
   onApplyCell,
+  onActiveCellChange,
 }: {
   grid: CalendarGrid;
   timeKey: string;
@@ -104,10 +114,12 @@ function CalendarRow({
   disabled: boolean;
   allowedCellKeys: Set<string>;
   previewCellKeys: Set<string>;
+  activeCellKey: string | null;
   onBegin: (cellKey: string) => void;
   onHover: (cellKey: string) => void;
   onCommit: () => void;
   onApplyCell: (cellKey: string) => void;
+  onActiveCellChange: (cellKey: string) => void;
 }) {
   return (
     <>
@@ -133,10 +145,13 @@ function CalendarRow({
             disabled={disabled}
             isAllowed={allowedCellKeys.has(cell.key)}
             isPreview={previewCellKeys.has(cell.key)}
+            isActive={cell.key === activeCellKey}
+            grid={grid}
             onBegin={onBegin}
             onHover={onHover}
             onCommit={onCommit}
             onApplyCell={onApplyCell}
+            onActiveCellChange={onActiveCellChange}
           />
         );
       })}
@@ -150,20 +165,26 @@ function CalendarCellButton({
   disabled,
   isAllowed,
   isPreview,
+  isActive,
+  grid,
   onBegin,
   onHover,
   onCommit,
   onApplyCell,
+  onActiveCellChange,
 }: {
   cell: CalendarGridCell;
   mode: PaintMode;
   disabled: boolean;
   isAllowed: boolean;
   isPreview: boolean;
+  isActive: boolean;
+  grid: CalendarGrid;
   onBegin: (cellKey: string) => void;
   onHover: (cellKey: string) => void;
   onCommit: () => void;
   onApplyCell: (cellKey: string) => void;
+  onActiveCellChange: (cellKey: string) => void;
 }) {
   const previewClass =
     mode === "block" ? "bg-rose-200" : mode === "preview" ? "bg-sky-200" : "bg-blue-200";
@@ -178,6 +199,7 @@ function CalendarCellButton({
       type="button"
       role="gridcell"
       data-calendar-cell-key={cell.key}
+      tabIndex={isActive ? 0 : -1}
       disabled={disabled}
       aria-selected={isAllowed}
       aria-label={`${cell.dayLabel} ${cell.timeLabel} ${
@@ -192,6 +214,7 @@ function CalendarCellButton({
       )}
       onPointerDown={(event) => {
         if (disabled) return;
+        onActiveCellChange(cell.key);
         if (event.pointerType === "touch") {
           touchStartRef.current = {
             x: event.clientX,
@@ -230,12 +253,45 @@ function CalendarCellButton({
         onCommit();
       }}
       onKeyDown={(event) => {
-        if (disabled || (event.key !== "Enter" && event.key !== " ")) return;
+        if (disabled) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onApplyCell(cell.key);
+          return;
+        }
+        const adjacentCell = getAdjacentCell(grid, cell, event.key);
+        if (!adjacentCell) return;
         event.preventDefault();
-        onApplyCell(cell.key);
+        onActiveCellChange(adjacentCell.key);
+        const gridElement = event.currentTarget.closest('[role="grid"]');
+        const adjacentElement = Array.from(
+          gridElement?.querySelectorAll<HTMLElement>("[data-calendar-cell-key]") ?? [],
+        ).find((element) => element.dataset.calendarCellKey === adjacentCell.key);
+        adjacentElement?.focus();
       }}
+      onFocus={() => onActiveCellChange(cell.key)}
     />
   );
+}
+
+function getAdjacentCell(grid: CalendarGrid, cell: CalendarGridCell, key: string) {
+  const dayIndex = grid.days.findIndex((day) => day.dateKey === cell.dateKey);
+  const timeIndex = grid.timeKeys.indexOf(cell.timeKey);
+  const [nextDayIndex, nextTimeIndex] =
+    key === "ArrowLeft"
+      ? [dayIndex - 1, timeIndex]
+      : key === "ArrowRight"
+        ? [dayIndex + 1, timeIndex]
+        : key === "ArrowUp"
+          ? [dayIndex, timeIndex - 1]
+          : key === "ArrowDown"
+            ? [dayIndex, timeIndex + 1]
+            : [-1, -1];
+  const nextDay = grid.days[nextDayIndex];
+  const nextTime = grid.timeKeys[nextTimeIndex];
+  return nextDay && nextTime
+    ? grid.cellsByDateTime.get(`${nextDay.dateKey}_${nextTime}`)
+    : undefined;
 }
 
 function getPointerTargetCellKey(event: React.PointerEvent<HTMLElement>) {

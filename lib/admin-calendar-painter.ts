@@ -3,6 +3,7 @@ import {
   addDaysToDateKey,
   getDateKeyInTimeZone,
   isWeekend,
+  MAX_CUSTOM_RANGE_DAYS,
   timeKeyToMinutes,
   zonedWallTimeToUtc,
 } from "@/lib/meeting-presets";
@@ -100,6 +101,9 @@ export function buildCalendarGrid({
   const requestedDayCount = daysBetween(firstDate, lastRangeDate) + 1;
   if (requestedDayCount < 1) {
     throw new Error("Calendar to date must be on or after its from date");
+  }
+  if (hasVisibleDateRange && requestedDayCount > MAX_CUSTOM_RANGE_DAYS) {
+    throw new Error(`Calendar range cannot exceed ${MAX_CUSTOM_RANGE_DAYS} days`);
   }
   const dayCount = hasVisibleDateRange
     ? maxDays

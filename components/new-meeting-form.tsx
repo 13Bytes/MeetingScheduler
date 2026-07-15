@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useReducer, useState } from "react";
 import type { AllowedTimeRangeDraft, AllowedTimePresetId } from "@/lib/meeting-presets";
-import { buildAllowedTimeRanges } from "@/lib/meeting-presets";
+import { buildAllowedTimeRanges, MAX_CUSTOM_RANGE_DAYS } from "@/lib/meeting-presets";
 import {
   allowedCellKeysToRangesForSave,
   buildCalendarGrid,
@@ -106,16 +106,14 @@ export function NewMeetingForm({
   ]);
   const duration = Number(durationMinutes);
   const granularity = Number(granularityMinutes);
-  const calendarDuration =
+  const hasValidCalendarSettings =
     Number.isInteger(duration) &&
     Number.isInteger(granularity) &&
     duration > 0 &&
     granularity > 0 &&
-    duration % granularity === 0
-      ? duration
-      : 30;
-  const calendarGranularity =
-    Number.isInteger(granularity) && granularity > 0 ? granularity : 30;
+    duration % granularity === 0;
+  const calendarDuration = hasValidCalendarSettings ? duration : 30;
+  const calendarGranularity = hasValidCalendarSettings ? granularity : 30;
   const calendarDateRange = useMemo(
     () => getCustomCalendarDateRange(presetId, customFromDate, customToDate),
     [customFromDate, customToDate, presetId],
@@ -201,6 +199,17 @@ export function NewMeetingForm({
 
     let allowedTimeRanges: AllowedTimeRangeDraft[];
     try {
+      if (useConstraintCalendar) {
+        buildSelectedRanges({
+          presetId,
+          timeZone,
+          customFromDate,
+          customToDate,
+          customStartTime,
+          customEndTime,
+          customWeekdays,
+        });
+      }
       allowedTimeRanges = useConstraintCalendar
         ? calendarRanges
         : buildSelectedRanges({
@@ -493,7 +502,7 @@ export function NewMeetingForm({
                       <label
                         key={day.value}
                         className={cn(
-                          "flex cursor-pointer items-center justify-center rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                          "flex cursor-pointer items-center justify-center rounded-md border px-2 py-2 text-sm font-medium transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                           customWeekdays.includes(day.value)
                             ? "border-primary bg-blue-50 text-blue-900"
                             : "border-border bg-surface text-slate-600 hover:bg-surface-muted",
@@ -727,7 +736,8 @@ function getCustomCalendarDateRange(
     !Number.isFinite(toTimestamp) ||
     new Date(fromTimestamp).toISOString().slice(0, 10) !== fromDate ||
     new Date(toTimestamp).toISOString().slice(0, 10) !== toDate ||
-    toTimestamp < fromTimestamp
+    toTimestamp < fromTimestamp ||
+    (toTimestamp - fromTimestamp) / (24 * 60 * 60 * 1000) + 1 > MAX_CUSTOM_RANGE_DAYS
   ) {
     return null;
   }

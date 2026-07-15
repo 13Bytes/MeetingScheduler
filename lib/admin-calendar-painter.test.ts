@@ -10,6 +10,7 @@ import {
   selectWeekends,
   validatePaintedRanges,
 } from "@/lib/admin-calendar-painter";
+import { MAX_CUSTOM_RANGE_DAYS } from "@/lib/meeting-presets";
 
 const berlinRanges = [
   {
@@ -59,6 +60,19 @@ describe("admin calendar grid generation", () => {
       "2026-07-18",
       "2026-07-19",
     ]);
+  });
+
+  it("rejects explicit visible ranges beyond the supported product limit", () => {
+    expect(() =>
+      buildCalendarGrid({
+        timeZone: "UTC",
+        granularityMinutes: 30,
+        durationMinutes: 60,
+        allowedTimeRanges: [],
+        visibleFromDate: "2026-01-01",
+        visibleToDate: "2026-02-12",
+      }),
+    ).toThrow(`Calendar range cannot exceed ${MAX_CUSTOM_RANGE_DAYS} days`);
   });
 
   it("skips nonexistent local cells across daylight-saving transitions", () => {
