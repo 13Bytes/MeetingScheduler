@@ -289,8 +289,9 @@ export function MeetingResultsPanel({
                 ) : null}
                 {hasParticipants && hasCandidates ? null : (
                   <p className="text-sm leading-6 text-slate-600">
-                    This comparison will appear once participants share their
-                    availability.
+                    {hasParticipants && !hasCandidates
+                      ? "The selected time windows are too short for this meeting."
+                      : "This comparison will appear once participants share their availability."}
                   </p>
                 )}
               </CardContent>
@@ -503,7 +504,7 @@ function FinalConfirmation({
         {durationMinutes} minutes in {timeZone}. {candidate.availableParticipantCount} of{" "}
         {candidate.totalParticipantCount} can attend
         {candidate.reluctantVoteCount > 0
-          ? `, with ${candidate.reluctantVoteCount} marking part of the time as “if needed”`
+          ? `, with ${candidate.reluctantVoteCount} response ${candidate.reluctantVoteCount === 1 ? "cell" : "cells"} marking part of the time as “if needed”`
           : ""}
         .
       </p>

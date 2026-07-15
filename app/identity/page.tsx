@@ -29,45 +29,49 @@ export default async function IdentityPage() {
   return (
     <AppShell>
       <UserMembershipImporter />
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,420px)] lg:items-start">
-        <div className="space-y-4">
-          <h1 className="text-3xl font-semibold tracking-normal text-foreground">
-            All Meetings
-          </h1>
-          {dashboard && !("error" in dashboard) ? (
-            <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Your meetings are ready here. Add an email if you want to find them from
-              another device too.
-            </p>
-          ) : (
-            <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Meetings you create or join will appear here. Add an email to keep them easy
-              to find on any device.
-            </p>
-          )}
-          {!session ? (
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="secondary" className="w-full sm:w-auto">
-                <Link href="/new">Create without an account</Link>
-              </Button>
-            </div>
-          ) : null}
-        </div>
-        <IdentityLoginPanel />
+      <section className="space-y-4">
+        <h1 className="text-3xl font-semibold tracking-normal text-foreground">
+          All Meetings
+        </h1>
+        {dashboard && !("error" in dashboard) ? (
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            Your meetings are ready here. Add an email if you want to find them from
+            another device too.
+          </p>
+        ) : (
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            Meetings you create or join will appear here. Add an email to keep them easy
+            to find on any device.
+          </p>
+        )}
+        {!session ? (
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="secondary" className="w-full sm:w-auto">
+              <Link href="/new">Create without an account</Link>
+            </Button>
+          </div>
+        ) : null}
       </section>
 
-      {dashboard ? (
-        "error" in dashboard ? (
-          <div
-            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
-            role="alert"
-          >
-            {dashboard.error}
-          </div>
-        ) : (
-          <IdentityMeetingsList dashboard={dashboard} />
-        )
-      ) : null}
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
+        <div className="min-w-0">
+          {dashboard ? (
+            "error" in dashboard ? (
+              <div
+                className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
+                role="alert"
+              >
+                {dashboard.error}
+              </div>
+            ) : (
+              <IdentityMeetingsList dashboard={dashboard} />
+            )
+          ) : null}
+        </div>
+        <aside className="lg:sticky lg:top-6">
+          <IdentityLoginPanel />
+        </aside>
+      </section>
     </AppShell>
   );
 }

@@ -309,6 +309,36 @@ describe("ParticipantAvailabilityPainter", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps results unavailable when no results payload exists", () => {
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          ownAvailabilityRecords: [
+            {
+              cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+              startUtc: "2026-06-25T07:00:00.000Z",
+              endUtc: "2026-06-25T07:30:00.000Z",
+              timeZone: "Europe/Berlin",
+              response: "yes",
+            },
+          ],
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={vi.fn()}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /availability calendar/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /results & shortlist/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("defaults returning voters to results and keeps availability one switch away", () => {
     render(
       <ParticipantAvailabilityPainter
@@ -619,6 +649,7 @@ describe("ParticipantAvailabilityPainter", () => {
   });
 
   it("switches to results after a participant saves their vote", async () => {
+    const onSaveAvailability = vi.fn().mockResolvedValue(undefined);
     render(
       <ParticipantAvailabilityPainter
         data={{
@@ -636,14 +667,29 @@ describe("ParticipantAvailabilityPainter", () => {
           results,
         }}
         existingMembershipToken="member-secret-token"
-        onSaveAvailability={vi.fn().mockResolvedValue(undefined)}
+        onSaveAvailability={onSaveAvailability}
         baseDate={new Date("2026-06-25T06:00:00.000Z")}
       />,
     );
 
     fireEvent.click(screen.getByRole("tab", { name: /^availability$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^no$/i }));
+    fireEvent.keyDown(screen.getByRole("gridcell", { name: /thu jun 25 09:00 yes/i }), {
+      key: "Enter",
+    });
     fireEvent.click(screen.getByRole("button", { name: /save response/i }));
 
+    await waitFor(() =>
+      expect(onSaveAvailability).toHaveBeenCalledWith("member-secret-token", [
+        {
+          startUtc: "2026-06-25T07:00:00.000Z",
+          endUtc: "2026-06-25T07:30:00.000Z",
+          timeZone: "Europe/Berlin",
+          response: "no",
+        },
+      ]),
+    );
+    await onSaveAvailability.mock.results[0].value;
     expect(
       await screen.findByRole("heading", { name: /best times/i }),
     ).toBeInTheDocument();
@@ -651,6 +697,53 @@ describe("ParticipantAvailabilityPainter", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  it("disables availability editing while a response save is pending", async () => {
+    let resolveSave!: () => void;
+    const savePromise = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    const onSaveAvailability = vi.fn(() => savePromise);
+    render(
+      <ParticipantAvailabilityPainter
+        data={{
+          ...baseData,
+          membership: { role: "member", displayName: "Ada Lovelace" },
+          ownAvailabilityRecords: [
+            {
+              cellKey: "2026-06-25T07:00:00.000Z_2026-06-25T07:30:00.000Z",
+              startUtc: "2026-06-25T07:00:00.000Z",
+              endUtc: "2026-06-25T07:30:00.000Z",
+              timeZone: "Europe/Berlin",
+              response: "yes",
+            },
+          ],
+          results,
+        }}
+        existingMembershipToken="member-secret-token"
+        onSaveAvailability={onSaveAvailability}
+        baseDate={new Date("2026-06-25T06:00:00.000Z")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /^availability$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^no$/i }));
+    fireEvent.keyDown(screen.getByRole("gridcell", { name: /thu jun 25 09:00 yes/i }), {
+      key: "Enter",
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save response/i }));
+
+    await waitFor(() => expect(onSaveAvailability).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: /^yes$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /mark all yes/i })).toBeDisabled();
+    expect(screen.getByRole("gridcell", { name: /thu jun 25 09:00 no/i })).toBeDisabled();
+
+    resolveSave();
+    await savePromise;
+    expect(
+      await screen.findByRole("heading", { name: /best times/i }),
+    ).toBeInTheDocument();
   });
 
   it("updates a nameless existing membership before saving availability", async () => {

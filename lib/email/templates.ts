@@ -60,8 +60,8 @@ export function renderMeetingLifecycleEmail(args: {
       ? `Selected time: ${formatSlot(args.finalizedSlot)}`
       : undefined;
   const lead = isFinalized
-    ? "An admin finalized this poll."
-    : "An admin reopened this poll for more edits.";
+    ? "An organizer finalized this meeting."
+    : "An organizer reopened this meeting for more responses.";
   const text = [
     subject,
     "",

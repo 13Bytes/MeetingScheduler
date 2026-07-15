@@ -463,10 +463,11 @@ export function ParticipantAvailabilityPainter({
     createInitialAvailabilityPaintState,
   );
   const [activeView, setActiveView] = useState<MeetingView>(() =>
-    initialResponses.size > 0 || meeting.lifecycleState === "finalized"
+    data.results && (initialResponses.size > 0 || meeting.lifecycleState === "finalized")
       ? "results"
       : "availability",
   );
+  const visibleView = data.results ? activeView : "availability";
   const summary = useMemo(
     () => summarizeAvailability(grid, paintState.responsesByCellKey),
     [grid, paintState.responsesByCellKey],
@@ -605,7 +606,7 @@ export function ParticipantAvailabilityPainter({
       } else {
         setNotice("No availability changes to save.");
       }
-      if (paintState.responsesByCellKey.size > 0) {
+      if (data.results && paintState.responsesByCellKey.size > 0) {
         setActiveView("results");
       }
     } catch (caughtError) {
@@ -620,7 +621,7 @@ export function ParticipantAvailabilityPainter({
   }
 
   function applyAllAllowed(response: ParticipantPaintMode) {
-    if (!canEdit) {
+    if (!canEdit || isSaving) {
       return;
     }
     setError(null);
@@ -665,7 +666,7 @@ export function ParticipantAvailabilityPainter({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <section className="grid gap-3">
         <div className="grid gap-2">
           <div className="flex flex-row gap-2 items-center">
@@ -703,32 +704,37 @@ export function ParticipantAvailabilityPainter({
       </p>
 
       <nav
-        className="sticky top-0 z-20 rounded-lg border border-border bg-surface/95 p-1 shadow-sm backdrop-blur"
+        className="order-first sticky top-0 z-20 rounded-lg border border-border bg-surface/95 p-1 shadow-sm backdrop-blur sm:order-none"
         aria-label="Meeting sections"
       >
-        <div className="grid grid-cols-2 gap-1" role="tablist">
+        <div
+          className={cn("grid gap-1", data.results ? "grid-cols-2" : "grid-cols-1")}
+          role="tablist"
+        >
           <MeetingViewTab
             id="availability-tab"
             controls="availability-view"
-            isActive={activeView === "availability"}
+            isActive={visibleView === "availability"}
             icon={CalendarDays}
             onClick={() => setActiveView("availability")}
           >
             Availability
           </MeetingViewTab>
-          <MeetingViewTab
-            id="results-tab"
-            controls="results-view"
-            isActive={activeView === "results"}
-            icon={BarChart3}
-            onClick={() => setActiveView("results")}
-          >
-            Results &amp; shortlist
-          </MeetingViewTab>
+          {data.results ? (
+            <MeetingViewTab
+              id="results-tab"
+              controls="results-view"
+              isActive={visibleView === "results"}
+              icon={BarChart3}
+              onClick={() => setActiveView("results")}
+            >
+              Results &amp; shortlist
+            </MeetingViewTab>
+          ) : null}
         </div>
       </nav>
 
-      {activeView === "availability" ? (
+      {visibleView === "availability" ? (
         <div
           id="availability-view"
           role="tabpanel"
@@ -744,7 +750,7 @@ export function ParticipantAvailabilityPainter({
                 </CardTitle>
                 <AvailabilityBrushControls
                   mode={mode}
-                  disabled={!canEdit}
+                  disabled={!canEdit || isSaving}
                   onModeChange={setMode}
                 />
               </div>
@@ -753,7 +759,7 @@ export function ParticipantAvailabilityPainter({
               <AvailabilityGrid
                 grid={grid}
                 mode={mode}
-                disabled={!canEdit}
+                disabled={!canEdit || isSaving}
                 responsesByCellKey={paintState.responsesByCellKey}
                 previewCellKeys={paintState.previewCellKeys}
                 rangeAnchorCellKey={rangeAnchorCellKey}
@@ -814,7 +820,7 @@ export function ParticipantAvailabilityPainter({
                     <input
                       className={inputClassName}
                       value={displayName}
-                      disabled={!canEdit}
+                      disabled={!canEdit || isSaving}
                       aria-invalid={error?.toLowerCase().includes("display name")}
                       onChange={(event) => setDisplayName(event.target.value)}
                       placeholder="Ada Lovelace"
@@ -840,7 +846,7 @@ export function ParticipantAvailabilityPainter({
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={!canEdit}
+                    disabled={!canEdit || isSaving}
                     onClick={() => applyAllAllowed("yes")}
                   >
                     <Paintbrush className="size-4" aria-hidden="true" />
@@ -849,7 +855,7 @@ export function ParticipantAvailabilityPainter({
                   <Button
                     type="button"
                     variant="ghost"
-                    disabled={!canEdit}
+                    disabled={!canEdit || isSaving}
                     onClick={() => applyAllAllowed("clear")}
                   >
                     <Eraser className="size-4" aria-hidden="true" />
@@ -884,7 +890,7 @@ export function ParticipantAvailabilityPainter({
             />
           </aside>
         </div>
-      ) : (
+      ) : data.results ? (
         <div
           id="results-view"
           role="tabpanel"
@@ -894,7 +900,7 @@ export function ParticipantAvailabilityPainter({
           {resultsPanel}
           <div className="max-w-lg">{meetingLinksPanel}</div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1017,7 +1023,7 @@ function MeetingLinksPanel({
         setAdminInviteError(null);
       } catch {
         requestedAdminInviteRef.current = null;
-        setAdminInviteError("Unable to prepare the admin invite link.");
+        setAdminInviteError("Unable to prepare the organizer invite link.");
       } finally {
         setIsPreparingAdminInvite(false);
       }

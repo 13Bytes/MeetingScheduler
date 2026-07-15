@@ -203,6 +203,26 @@ describe("MeetingResultsPanel", () => {
     expect(screen.getByText(/best times will appear/i)).toBeInTheDocument();
   });
 
+  it("explains when voted availability cannot form a full meeting window", () => {
+    render(
+      <MeetingResultsPanel
+        results={{
+          ...detailedResults,
+          candidateCount: 0,
+          candidates: [],
+          shortlist: [],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getAllByText(/selected time windows are too short for this meeting/i),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByText(/comparison will appear once participants share/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("lets admins finalize the recommended shortlist selection", async () => {
     const onFinalize = vi.fn().mockResolvedValue(undefined);
     render(
@@ -217,6 +237,7 @@ describe("MeetingResultsPanel", () => {
     expect(
       screen.getByText(/confirm thu, jun 25, 9:00 am-10:00 am/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/1 response cell marking.*if needed/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /finalize selected time/i }));
 
     await waitFor(() =>
