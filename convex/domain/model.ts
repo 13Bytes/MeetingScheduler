@@ -1,3 +1,5 @@
+import { assertCalendarSize } from "./calendarLimits";
+
 export const meetingLifecycleStates = ["open", "finalized"] as const;
 export type MeetingLifecycleState = (typeof meetingLifecycleStates)[number];
 
@@ -99,6 +101,7 @@ export function normalizeMeetingSettings(
   const allowedTimeRanges = (input.allowedTimeRanges ?? []).map((range) =>
     normalizeAllowedTimeRange(range, canonicalTimeZone),
   );
+  assertCalendarSize(allowedTimeRanges, granularityMinutes);
   for (const range of allowedTimeRanges) {
     assertAllowedTimeRangeCompatibility(range, durationMinutes, granularityMinutes);
   }

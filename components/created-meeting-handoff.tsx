@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Check, Clipboard, Link2, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, Clipboard, Link2 } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,11 @@ export function CreatedMeetingHandoff({
   meetingSlug: string;
   adminMembershipToken: string;
 }) {
-  const origin = useSyncExternalStore(subscribeToOrigin, getBrowserOrigin, getServerOrigin);
+  const origin = useSyncExternalStore(
+    subscribeToOrigin,
+    getBrowserOrigin,
+    getServerOrigin,
+  );
   const [copiedLink, setCopiedLink] = useState<LinkKind | null>(null);
   const [copyError, setCopyError] = useState(false);
 

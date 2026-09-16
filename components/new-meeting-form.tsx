@@ -68,11 +68,12 @@ export function NewMeetingForm({
   const [creatorPrivacyMode, setCreatorPrivacyMode] = useState<PrivacyMode>("detailed");
   const [everyoneAdmin, setEveryoneAdmin] = useState(false);
   const [presetId, setPresetId] = useState<AllowedTimePresetId>(
-    "weekdays-9-17-next-2-weeks",
+    "weekdays-8-17-next-2-weeks",
   );
+  const [nextDayCount, setNextDayCount] = useState("10");
   const [customFromDate, setCustomFromDate] = useState(getDefaultCustomFromDate);
   const [customToDate, setCustomToDate] = useState(getDefaultCustomToDate);
-  const [customStartTime, setCustomStartTime] = useState("09:00");
+  const [customStartTime, setCustomStartTime] = useState("08:00");
   const [customEndTime, setCustomEndTime] = useState("17:00");
   const [customWeekdays, setCustomWeekdays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [useConstraintCalendar, setUseConstraintCalendar] = useState(false);
@@ -91,6 +92,7 @@ export function NewMeetingForm({
         customStartTime,
         customEndTime,
         customWeekdays,
+        nextDayCount,
       });
     } catch {
       return [];
@@ -103,6 +105,7 @@ export function NewMeetingForm({
     customStartTime,
     customEndTime,
     customWeekdays,
+    nextDayCount,
   ]);
   const duration = Number(durationMinutes);
   const granularity = Number(granularityMinutes);
@@ -208,6 +211,7 @@ export function NewMeetingForm({
           customStartTime,
           customEndTime,
           customWeekdays,
+          nextDayCount,
         });
       }
       allowedTimeRanges = useConstraintCalendar
@@ -220,6 +224,7 @@ export function NewMeetingForm({
             customStartTime,
             customEndTime,
             customWeekdays,
+            nextDayCount,
           });
       if (useConstraintCalendar && !calendarValidation.isValid) {
         throw new Error(
@@ -431,28 +436,68 @@ export function NewMeetingForm({
               aria-label="Allowed time preset"
             >
               {presetOptions.map((option) => (
-                <label
+                <div
                   key={option.id}
                   className={cn(
-                    "grid cursor-pointer gap-2 rounded-md border p-4 text-sm transition-colors md:min-h-28",
+                    "grid content-start gap-2 rounded-md border p-4 text-sm transition-colors md:min-h-28",
                     presetId === option.id
                       ? "border-primary bg-blue-50"
                       : "border-border bg-surface hover:bg-surface-muted",
                   )}
                 >
-                  <span className="flex items-start gap-2">
-                    <input
-                      type="radio"
-                      name="allowed-time-preset"
-                      className="mt-0.5 size-4 shrink-0 accent-primary"
-                      value={option.id}
-                      checked={presetId === option.id}
-                      onChange={() => setPresetId(option.id)}
-                    />
-                    <span className="font-medium text-foreground">{option.label}</span>
-                  </span>
-                  <span className="leading-6 text-slate-600">{option.description}</span>
-                </label>
+                  <div className="flex min-h-8 items-center gap-2">
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        id={`preset-${option.id}`}
+                        type="radio"
+                        name="allowed-time-preset"
+                        className="mt-0.5 size-4 shrink-0 accent-primary"
+                        value={option.id}
+                        checked={presetId === option.id}
+                        onChange={() => setPresetId(option.id)}
+                        aria-label={
+                          option.id === "next-days-8-17"
+                            ? `Next ${nextDayCount || "X"} days`
+                            : option.label
+                        }
+                      />
+                      <span className="font-medium text-foreground">
+                        {option.id === "next-days-8-17" ? "Next" : option.label}
+                      </span>
+                    </label>
+                    {option.id === "next-days-8-17" ? (
+                      <>
+                        <input
+                          type="number"
+                          aria-label="Number of days"
+                          className="h-8 w-16 rounded-md border border-border bg-surface px-2 font-medium text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                          min={presetId === option.id ? 1 : undefined}
+                          max={presetId === option.id ? MAX_CUSTOM_RANGE_DAYS : undefined}
+                          step={presetId === option.id ? 1 : "any"}
+                          required={presetId === option.id}
+                          value={nextDayCount}
+                          onFocus={() => setPresetId(option.id)}
+                          onChange={(event) => {
+                            setPresetId(option.id);
+                            setNextDayCount(event.target.value);
+                          }}
+                        />
+                        <label
+                          htmlFor={`preset-${option.id}`}
+                          className="cursor-pointer font-medium text-foreground"
+                        >
+                          days
+                        </label>
+                      </>
+                    ) : null}
+                  </div>
+                  <label
+                    htmlFor={`preset-${option.id}`}
+                    className="cursor-pointer leading-6 text-slate-600"
+                  >
+                    {option.description}
+                  </label>
+                </div>
               ))}
             </div>
 
@@ -530,104 +575,117 @@ export function NewMeetingForm({
               </div>
             ) : null}
 
-            <div className="rounded-md border border-border bg-surface-muted p-4 text-sm text-slate-600">
-              {previewRanges.length > 0
-                ? `Participants can choose from ${previewRanges.length} time window${
-                    previewRanges.length === 1 ? "" : "s"
-                  } in ${timeZone}.`
-                : "Choose at least one time window for participants."}
-            </div>
+            <div className="space-y-3 border-l-2 border-primary/30 pl-4">
+              <div className="text-sm text-slate-600" aria-live="polite">
+                {previewRanges.length > 0
+                  ? `Participants can choose from ${previewRanges.length} time window${
+                      previewRanges.length === 1 ? "" : "s"
+                    } in ${timeZone}.`
+                  : "Choose at least one time window for participants."}
+              </div>
 
-            <label className="flex items-start gap-3 rounded-md border border-border bg-surface p-4">
-              <input
-                type="checkbox"
-                className="mt-1 size-4 shrink-0 accent-primary"
-                checked={useConstraintCalendar}
-                onChange={(event) => setUseConstraintCalendar(event.target.checked)}
-                aria-controls="creation-constraint-calendar"
-              />
-              <span className="grid gap-1">
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CalendarDays className="size-4 text-primary" aria-hidden="true" />
-                  Choose exact times in the Constraint Calendar
-                </span>
-                <span className="text-sm leading-6 text-slate-600">
-                  Optional. Start with the preset above, then paint individual time slots.
-                </span>
-              </span>
-            </label>
-
-            {useConstraintCalendar ? (
-              <div
-                id="creation-constraint-calendar"
-                className="overflow-hidden rounded-md border border-border bg-surface"
+              <label
+                className={cn(
+                  "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors",
+                  useConstraintCalendar ? "bg-blue-50" : "hover:bg-surface-muted",
+                )}
               >
-                <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="font-medium text-foreground">Constraint Calendar</h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Blue fields are allowed. Drag or use the keyboard to edit them.
-                    </p>
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 accent-primary"
+                  checked={useConstraintCalendar}
+                  onChange={(event) => setUseConstraintCalendar(event.target.checked)}
+                  aria-controls="creation-constraint-calendar"
+                />
+                <span className="grid gap-1">
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+                    Adjust in calendar
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Fine-tune{" "}
+                    {presetId === "next-days-8-17"
+                      ? `the next ${nextDayCount || "X"} days`
+                      : presetId === "custom-daily-range"
+                        ? "your custom range"
+                        : "Weekdays 8-17"}{" "}
+                    above.
+                  </span>
+                </span>
+              </label>
+
+              {useConstraintCalendar ? (
+                <div
+                  id="creation-constraint-calendar"
+                  className="overflow-hidden rounded-md border border-border bg-surface"
+                >
+                  <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="font-medium text-foreground">Constraint Calendar</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Blue fields are allowed. Drag or use the keyboard to edit them.
+                      </p>
+                    </div>
+                    <BrushControls
+                      mode={paintMode}
+                      disabled={false}
+                      onModeChange={setPaintMode}
+                    />
                   </div>
-                  <BrushControls
+                  <CalendarPaintGrid
+                    grid={calendarGrid}
                     mode={paintMode}
                     disabled={false}
-                    onModeChange={setPaintMode}
+                    allowedCellKeys={displayedPaintState.allowedCellKeys}
+                    previewCellKeys={displayedPaintState.previewCellKeys}
+                    ariaLabel="Creation allowed time calendar"
+                    onBegin={(cellKey) =>
+                      dispatchPaint({ type: "begin", cellKey, mode: paintMode })
+                    }
+                    onHover={(cellKey) =>
+                      dispatchPaint({ type: "hover", cellKey, grid: calendarGrid })
+                    }
+                    onCommit={() => dispatchPaint({ type: "commit" })}
+                    onCancel={() => dispatchPaint({ type: "cancel" })}
+                    onApplyCell={(cellKey) => {
+                      if (paintMode === "preview") {
+                        dispatchPaint({ type: "begin", cellKey, mode: paintMode });
+                        return;
+                      }
+                      dispatchPaint({
+                        type: "applyPreset",
+                        cellKeys: [cellKey],
+                        mode: paintMode,
+                      });
+                    }}
                   />
+                  <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p
+                      className={cn(
+                        "text-sm",
+                        calendarValidation.isValid ? "text-slate-600" : "text-warning",
+                      )}
+                    >
+                      {calendarValidation.isValid
+                        ? `${calendarRanges.length} exact allowed range${
+                            calendarRanges.length === 1 ? "" : "s"
+                          } will be used.`
+                        : calendarValidation.message}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() =>
+                        dispatchPaint({ type: "replace", allowedCellKeys: [] })
+                      }
+                    >
+                      <Eraser className="size-4" aria-hidden="true" />
+                      Clear all
+                    </Button>
+                  </div>
                 </div>
-                <CalendarPaintGrid
-                  grid={calendarGrid}
-                  mode={paintMode}
-                  disabled={false}
-                  allowedCellKeys={displayedPaintState.allowedCellKeys}
-                  previewCellKeys={displayedPaintState.previewCellKeys}
-                  ariaLabel="Creation allowed time calendar"
-                  onBegin={(cellKey) =>
-                    dispatchPaint({ type: "begin", cellKey, mode: paintMode })
-                  }
-                  onHover={(cellKey) =>
-                    dispatchPaint({ type: "hover", cellKey, grid: calendarGrid })
-                  }
-                  onCommit={() => dispatchPaint({ type: "commit" })}
-                  onCancel={() => dispatchPaint({ type: "cancel" })}
-                  onApplyCell={(cellKey) => {
-                    if (paintMode === "preview") {
-                      dispatchPaint({ type: "begin", cellKey, mode: paintMode });
-                      return;
-                    }
-                    dispatchPaint({
-                      type: "applyPreset",
-                      cellKeys: [cellKey],
-                      mode: paintMode,
-                    });
-                  }}
-                />
-                <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p
-                    className={cn(
-                      "text-sm",
-                      calendarValidation.isValid ? "text-slate-600" : "text-warning",
-                    )}
-                  >
-                    {calendarValidation.isValid
-                      ? `${calendarRanges.length} exact allowed range${
-                          calendarRanges.length === 1 ? "" : "s"
-                        } will be used.`
-                      : calendarValidation.message}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() =>
-                      dispatchPaint({ type: "replace", allowedCellKeys: [] })
-                    }
-                  >
-                    <Eraser className="size-4" aria-hidden="true" />
-                    Clear all
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </CardContent>
         </Card>
 
@@ -687,6 +745,7 @@ function buildSelectedRanges({
   customStartTime,
   customEndTime,
   customWeekdays,
+  nextDayCount,
 }: {
   presetId: AllowedTimePresetId;
   timeZone: string;
@@ -695,10 +754,12 @@ function buildSelectedRanges({
   customStartTime: string;
   customEndTime: string;
   customWeekdays: number[];
+  nextDayCount: string;
 }) {
   return buildAllowedTimeRanges({
     presetId,
     timeZone,
+    dayCount: Number(nextDayCount),
     customRange:
       presetId === "custom-daily-range"
         ? {
@@ -854,14 +915,14 @@ const presetOptions: {
   description: string;
 }[] = [
   {
-    id: "weekdays-9-17-next-2-weeks",
-    label: "Weekdays 9-17",
+    id: "weekdays-8-17-next-2-weeks",
+    label: "Weekdays 8-17",
     description: "Business hours over the next two weeks.",
   },
   {
-    id: "next-10-days-10-16",
-    label: "Next 10 days",
-    description: "Daily 10-16 windows, including weekends.",
+    id: "next-days-8-17",
+    label: "Next X days",
+    description: "Daily 8-17 windows, including weekends.",
   },
   {
     id: "custom-daily-range",

@@ -1,3 +1,5 @@
+import { assertCalendarSize } from "./calendarLimits";
+
 export type ResultAvailabilityResponse = "yes" | "reluctant" | "no";
 export type ResultPrivacyMode = "detailed" | "summaryOnly";
 
@@ -91,6 +93,7 @@ export function generateCandidateSlots({
   timeZone: string;
 }): CandidateSlot[] {
   assertCandidateSettings(granularityMinutes, durationMinutes);
+  assertCalendarSize(allowedTimeRanges, granularityMinutes);
   const granularityMs = granularityMinutes * minuteMs;
   const durationMs = durationMinutes * minuteMs;
   const cells = generateAllowedCells(allowedTimeRanges, granularityMinutes);

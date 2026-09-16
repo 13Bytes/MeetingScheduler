@@ -125,6 +125,9 @@ describe("NewMeetingForm", () => {
       target: { value: "120" },
     });
     fireEvent.click(screen.getByRole("radio", { name: /custom range/i }));
+    fireEvent.change(screen.getByLabelText("Start"), {
+      target: { value: "09:00" },
+    });
     fireEvent.change(screen.getByLabelText("End"), {
       target: { value: "10:00" },
     });
@@ -148,7 +151,7 @@ describe("NewMeetingForm", () => {
       screen.queryByRole("grid", { name: /creation allowed time calendar/i }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
 
     expect(
       screen.getByRole("grid", { name: /creation allowed time calendar/i }),
@@ -158,9 +161,31 @@ describe("NewMeetingForm", () => {
     );
   });
 
+  it("updates the calendar and submitted ranges when the day count changes", async () => {
+    const createMeeting = vi.fn().mockResolvedValue({
+      slug: "planning",
+      adminMembershipToken: "admin-secret",
+    });
+    render(<NewMeetingForm createMeeting={createMeeting} assignLocation={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Planning" } });
+    expect(screen.getByRole("spinbutton", { name: "Number of days" })).toHaveValue(10);
+    fireEvent.click(screen.getByRole("radio", { name: "Next 10 days" }));
+    expect(screen.getByText(/choose from 10 time windows/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Number of days" }), {
+      target: { value: "3" },
+    });
+    expect(screen.getByRole("radio", { name: "Next 3 days" })).toBeChecked();
+    expect(screen.getByText(/Fine-tune the next 3 days above/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(3 * 18);
+    fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
+    await waitFor(() => expect(createMeeting).toHaveBeenCalledTimes(1));
+    expect(createMeeting.mock.calls[0]?.[0].settings.allowedTimeRanges).toHaveLength(3);
+  });
+
   it("uses roving focus for exact-time calendar cells", () => {
     render(<NewMeetingForm />);
-    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
 
     const cells = screen.getAllByRole("gridcell");
     expect(cells.filter((cell) => cell.tabIndex === 0)).toHaveLength(1);
@@ -184,7 +209,7 @@ describe("NewMeetingForm", () => {
     fireEvent.change(screen.getByLabelText("To"), {
       target: { value: "2026-02-12" },
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
     fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
 
     expect(createMeeting).not.toHaveBeenCalled();
@@ -205,7 +230,7 @@ describe("NewMeetingForm", () => {
     fireEvent.change(screen.getByLabelText("Duration"), {
       target: { value: "30" },
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
     fireEvent.click(screen.getByRole("button", { name: /clear all/i }));
     fireEvent.keyDown(screen.getAllByRole("gridcell")[0]!, { key: "Enter" });
     fireEvent.click(screen.getByRole("button", { name: /create meeting/i }));
@@ -234,7 +259,7 @@ describe("NewMeetingForm", () => {
     fireEvent.change(screen.getByLabelText("End"), {
       target: { value: "14:00" },
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
 
     await waitFor(() => {
       const calendar = screen.getByRole("grid", {
@@ -268,7 +293,7 @@ describe("NewMeetingForm", () => {
       fireEvent.click(screen.getByLabelText(weekday));
     }
     fireEvent.click(screen.getByLabelText("Sat"));
-    fireEvent.click(screen.getByRole("checkbox", { name: /choose exact times/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /adjust in calendar/i }));
 
     await waitFor(() => {
       const selectedCells = screen.getAllByRole("gridcell", { selected: true });

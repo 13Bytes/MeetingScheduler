@@ -6,8 +6,8 @@ export type AllowedTimeRangeDraft = {
 };
 
 export const allowedTimePresetIds = [
-  "weekdays-9-17-next-2-weeks",
-  "next-10-days-10-16",
+  "weekdays-8-17-next-2-weeks",
+  "next-days-8-17",
   "custom-daily-range",
 ] as const;
 
@@ -28,6 +28,7 @@ export type BuildAllowedTimeRangesInput = {
   presetId: AllowedTimePresetId;
   timeZone: string;
   baseDate?: Date;
+  dayCount?: number;
   customRange?: CustomDailyRangeInput;
 };
 
@@ -37,32 +38,38 @@ export function buildAllowedTimeRanges({
   presetId,
   timeZone,
   baseDate = new Date(),
+  dayCount = 10,
   customRange,
 }: BuildAllowedTimeRangesInput): AllowedTimeRangeDraft[] {
   assertIanaTimeZone(timeZone);
   const today = getDateKeyInTimeZone(baseDate, timeZone);
 
-  if (presetId === "weekdays-9-17-next-2-weeks") {
+  if (presetId === "weekdays-8-17-next-2-weeks") {
     return buildDailyRanges({
       fromDate: addDaysToDateKey(today, 1),
       dayCount: 14,
-      startTime: "09:00",
+      startTime: "08:00",
       endTime: "17:00",
       includeWeekends: false,
       timeZone,
-      labelPrefix: "Weekday 9-17",
+      labelPrefix: "Weekday 8-17",
     });
   }
 
-  if (presetId === "next-10-days-10-16") {
+  if (presetId === "next-days-8-17") {
+    if (!Number.isInteger(dayCount) || dayCount < 1 || dayCount > MAX_CUSTOM_RANGE_DAYS) {
+      throw new Error(
+        `Number of days must be a whole number from 1 to ${MAX_CUSTOM_RANGE_DAYS}`,
+      );
+    }
     return buildDailyRanges({
       fromDate: addDaysToDateKey(today, 1),
-      dayCount: 10,
-      startTime: "10:00",
-      endTime: "16:00",
+      dayCount,
+      startTime: "08:00",
+      endTime: "17:00",
       includeWeekends: true,
       timeZone,
-      labelPrefix: "10-16",
+      labelPrefix: "8-17",
     });
   }
 

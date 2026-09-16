@@ -16,6 +16,12 @@ import {
 } from "./domain/validators";
 
 export default defineSchema({
+  maintenanceCursors: defineTable({
+    job: v.string(),
+    cursor: v.union(v.string(), v.null()),
+    cutoff: v.number(),
+  }).index("by_job", ["job"]),
+
   users: defineTable({
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -80,6 +80,49 @@ Default retention windows:
 - Sent, failed, or cancelled notification records: 30 days.
 - Expired rate-limit buckets: 2 days.
 
+Meeting cleanup scans at most 25 meetings per invocation and saves its cursor in
+`maintenanceCursors`. Protected meetings still advance that cursor, so repeated
+scheduled runs eventually examine the entire eligible population. A completed
+scan starts again from the beginning on the next run. Dry runs do not update
+saved progress; to preview subsequent pages, pass the returned
+`meetingContinueCursor` in `meetingPagination: { numItems: 25, cursor: "..." }`,
+using the same `now` value until `meetingScanDone` is true.
+
+## Ownership and calendar upgrade
+
+Email addresses entered while creating a meeting are recovery addresses only.
+They do not assign ownership of an email identity. On verification, legacy
+unverified user assignments are ignored. Only memberships attached to the
+verified email are linked to its owner, in batches of 100; unrelated memberships
+of an earlier browser session are not imported through an unverified claim.
+
+API-created memberships now include the verified identity's user. After deploying
+this change, backfill existing memberships with the internal maintenance function:
+
+```bash
+npx convex run maintenance:backfillMembershipUsers '{"paginationOpts":{"numItems":100,"cursor":null}}'
+```
+
+Repeat with the returned `continueCursor` until `isDone` is true. The backfill is
+idempotent, skips unverified identities and revoked memberships, and preserves
+existing membership owners. Select the intended deployment before running it.
+
+The fix prevents new unverified ownership claims. If this installation previously
+experienced an unauthorized account merge, existing verified associations need
+an audit and affected sessions/access links need revocation; the historical data
+does not distinguish legitimate merges from exploited ones automatically.
+
+Calendars are bounded to a 42-day span (with one hour for a DST fallback), 512
+input ranges, and 4,096 expanded cells. Browser and API writes use the same limits.
+Results also check the limits before expanding legacy data. An existing oversized
+calendar must have its allowed ranges reduced before results can be read. Use
+`meetings:updateMeetingSettings` with a valid admin membership token and bounded
+replacement ranges to repair such a calendar.
+
+Backend regression tests use `convex-test` in the edge runtime. The Vitest worker
+configuration disables Node's optional Web Storage so UI tests consistently use
+jsdom storage, including on Node 26. Run them with the normal `npm test` command.
+
 ## Monitoring
 
 The app intentionally avoids a heavyweight monitoring dependency at this stage.

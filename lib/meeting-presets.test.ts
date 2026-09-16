@@ -8,31 +8,55 @@ import {
 describe("allowed time presets", () => {
   it("builds weekday business ranges in the meeting timezone", () => {
     const ranges = buildAllowedTimeRanges({
-      presetId: "weekdays-9-17-next-2-weeks",
+      presetId: "weekdays-8-17-next-2-weeks",
       timeZone: "Europe/Berlin",
       baseDate: new Date("2026-06-24T12:00:00.000Z"),
     });
 
     expect(ranges).toHaveLength(10);
     expect(ranges[0]).toEqual({
-      startUtc: "2026-06-25T07:00:00.000Z",
+      startUtc: "2026-06-25T06:00:00.000Z",
       endUtc: "2026-06-25T15:00:00.000Z",
       timeZone: "Europe/Berlin",
-      label: "Weekday 9-17 2026-06-25",
+      label: "Weekday 8-17 2026-06-25",
     });
     expect(ranges.every((range) => range.timeZone === "Europe/Berlin")).toBe(true);
   });
 
   it("builds ten broad daily ranges including weekends", () => {
     const ranges = buildAllowedTimeRanges({
-      presetId: "next-10-days-10-16",
+      presetId: "next-days-8-17",
       timeZone: "UTC",
       baseDate: new Date("2026-06-24T12:00:00.000Z"),
     });
 
     expect(ranges).toHaveLength(10);
-    expect(ranges[0]?.startUtc).toBe("2026-06-25T10:00:00.000Z");
-    expect(ranges[9]?.endUtc).toBe("2026-07-04T16:00:00.000Z");
+    expect(ranges[0]?.startUtc).toBe("2026-06-25T08:00:00.000Z");
+    expect(ranges[9]?.endUtc).toBe("2026-07-04T17:00:00.000Z");
+  });
+
+  it("builds the requested number of days at 8-17", () => {
+    const ranges = buildAllowedTimeRanges({
+      presetId: "next-days-8-17",
+      dayCount: 3,
+      timeZone: "UTC",
+      baseDate: new Date("2026-06-24T12:00:00.000Z"),
+    });
+    expect(ranges).toHaveLength(3);
+    expect(ranges[2]).toMatchObject({
+      startUtc: "2026-06-27T08:00:00.000Z",
+      endUtc: "2026-06-27T17:00:00.000Z",
+    });
+  });
+
+  it.each([0, -1, 1.5, 43, NaN])("rejects an invalid day count of %s", (dayCount) => {
+    expect(() =>
+      buildAllowedTimeRanges({
+        presetId: "next-days-8-17",
+        dayCount,
+        timeZone: "UTC",
+      }),
+    ).toThrow(/Number of days must be a whole number from 1 to 42/u);
   });
 
   it("validates custom daily ranges", () => {

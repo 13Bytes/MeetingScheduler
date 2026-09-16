@@ -1,5 +1,11 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
+import { internalMutation, mutation } from "./_generated/server";
+import {
+  ensureVerifiedIdentityUser,
+  linkVerifiedIdentityMembershipPage,
+} from "./lib/memberships";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import {
@@ -9,6 +15,32 @@ import {
 } from "./domain/retention";
 
 const INTERNAL_IDENTITY_SECRET_ENV = "MEETING_SCHEDULER_IDENTITY_INTERNAL_SECRET";
+
+export const linkVerifiedIdentityMemberships = internalMutation({
+  args: {
+    emailIdentityId: v.id("emailIdentities"),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const page = await linkVerifiedIdentityMembershipPage(
+      ctx,
+      args.emailIdentityId,
+      args.paginationOpts,
+    );
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.maintenance.linkVerifiedIdentityMemberships,
+        {
+          emailIdentityId: args.emailIdentityId,
+          paginationOpts: { numItems: 100, cursor: page.continueCursor },
+        },
+      );
+    }
+    return null;
+  },
+});
 
 const retentionWindowArgs = v.optional(
   v.object({
@@ -28,12 +60,42 @@ export const cleanupRetainedData = mutation({
     dryRun: v.optional(v.boolean()),
     limit: v.optional(v.number()),
     windows: retentionWindowArgs,
+    meetingPagination: v.optional(paginationOptsValidator),
   },
+  returns: v.object({
+    dryRun: v.boolean(),
+    expiredMagicLinks: v.number(),
+    staleNotifications: v.number(),
+    retiredInactiveMemberships: v.number(),
+    revokedApiTokens: v.number(),
+    staleMembershipAccessTokens: v.number(),
+    staleRateLimits: v.number(),
+    anonymousMeetings: v.number(),
+    cascadedAvailabilityRecords: v.number(),
+    cascadedAllowedTimeRanges: v.number(),
+    cascadedMemberships: v.number(),
+    cascadedAccessTokens: v.number(),
+    cascadedNotifications: v.number(),
+    cascadedAuditEvents: v.number(),
+    meetingContinueCursor: v.string(),
+    meetingScanDone: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     await assertInternalIdentitySecret(args.internalSecret);
     const now = args.now ?? Date.now();
     const dryRun = args.dryRun ?? true;
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
+    if (!Number.isInteger(limit)) {
+      throw new Error("Cleanup limit must be an integer");
+    }
+    if (
+      args.meetingPagination &&
+      (!Number.isInteger(args.meetingPagination.numItems) ||
+        args.meetingPagination.numItems < 1 ||
+        args.meetingPagination.numItems > Math.min(limit, 25))
+    ) {
+      throw new Error("Meeting cleanup page size must be between 1 and 25");
+    }
     const cutoffs = buildRetentionCutoffs(now, args.windows ?? {});
     const summary = {
       dryRun,
@@ -171,12 +233,24 @@ export const cleanupRetainedData = mutation({
       }
     }
 
-    for (const meeting of await ctx.db
+    const progress = await ctx.db
+      .query("maintenanceCursors")
+      .withIndex("by_job", (q) => q.eq("job", "anonymousMeetings"))
+      .unique();
+    const resumeSavedScan = !dryRun && !args.meetingPagination && progress?.cursor;
+    const meetingCutoff = resumeSavedScan
+      ? progress.cutoff
+      : cutoffs.anonymousMeetingBefore;
+    const meetingPage = await ctx.db
       .query("meetings")
-      .withIndex("by_created_at", (q) =>
-        q.lte("createdAt", cutoffs.anonymousMeetingBefore),
-      )
-      .take(Math.min(limit, 25))) {
+      .withIndex("by_created_at", (q) => q.lte("createdAt", meetingCutoff))
+      .paginate(
+        args.meetingPagination ?? {
+          numItems: Math.min(limit, 25),
+          cursor: resumeSavedScan ? progress.cursor : null,
+        },
+      );
+    for (const meeting of meetingPage.page) {
       const meetingMemberships = await ctx.db
         .query("memberships")
         .withIndex("by_meeting", (q) => q.eq("meetingId", meeting._id))
@@ -192,16 +266,77 @@ export const cleanupRetainedData = mutation({
           (membership) => membership.tokenLastUsedAt ?? membership.updatedAt,
         ),
       );
-      if (latestMembershipActivity > cutoffs.anonymousMeetingBefore) {
+      if (latestMembershipActivity > meetingCutoff) {
         continue;
       }
       await countOrDeleteAnonymousMeeting(ctx, meeting, dryRun, summary);
-      if (summary.anonymousMeetings >= limit) {
-        break;
-      }
     }
 
-    return summary;
+    // Advance even when every row was protected. Dry runs never consume saved progress.
+    if (!dryRun) {
+      const nextProgress = {
+        job: "anonymousMeetings",
+        cursor: meetingPage.isDone ? null : meetingPage.continueCursor,
+        cutoff: meetingCutoff,
+      };
+      if (progress) {
+        await ctx.db.patch(progress._id, nextProgress);
+      } else {
+        await ctx.db.insert("maintenanceCursors", nextProgress);
+      }
+    }
+    return {
+      ...summary,
+      meetingContinueCursor: meetingPage.continueCursor,
+      meetingScanDone: meetingPage.isDone,
+    };
+  },
+});
+
+/** Repeat with continueCursor until isDone. Existing owners are never overwritten. */
+export const backfillMembershipUsers = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    updated: v.number(),
+    scanned: v.number(),
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    if (
+      !Number.isInteger(args.paginationOpts.numItems) ||
+      args.paginationOpts.numItems < 1 ||
+      args.paginationOpts.numItems > 100
+    ) {
+      throw new Error("Backfill page size must be between 1 and 100");
+    }
+    const page = await ctx.db
+      .query("memberships")
+      .withIndex("by_creation_time")
+      .paginate(args.paginationOpts);
+    let updated = 0;
+    for (const membership of page.page) {
+      if (
+        membership.userId ||
+        !membership.emailIdentityId ||
+        membership.revokedAt !== undefined
+      ) {
+        continue;
+      }
+      const identity = await ctx.db.get(membership.emailIdentityId);
+      if (!identity || identity.verifiedAt === undefined) {
+        continue;
+      }
+      const userId = await ensureVerifiedIdentityUser(ctx, identity, Date.now());
+      await ctx.db.patch(membership._id, { userId });
+      updated += 1;
+    }
+    return {
+      updated,
+      scanned: page.page.length,
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+    };
   },
 });
 

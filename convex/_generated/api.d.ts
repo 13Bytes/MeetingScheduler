@@ -10,6 +10,7 @@
 
 import type * as agentApi from "../agentApi.js";
 import type * as domain_agentApi from "../domain/agentApi.js";
+import type * as domain_calendarLimits from "../domain/calendarLimits.js";
 import type * as domain_finalization from "../domain/finalization.js";
 import type * as domain_identity from "../domain/identity.js";
 import type * as domain_model from "../domain/model.js";
@@ -18,6 +19,8 @@ import type * as domain_results from "../domain/results.js";
 import type * as domain_retention from "../domain/retention.js";
 import type * as domain_tokens from "../domain/tokens.js";
 import type * as domain_validators from "../domain/validators.js";
+import type * as lib_lifecycle from "../lib/lifecycle.js";
+import type * as lib_memberships from "../lib/memberships.js";
 import type * as maintenance from "../maintenance.js";
 import type * as meetings from "../meetings.js";
 import type * as rateLimit from "../rateLimit.js";
@@ -31,6 +34,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   agentApi: typeof agentApi;
   "domain/agentApi": typeof domain_agentApi;
+  "domain/calendarLimits": typeof domain_calendarLimits;
   "domain/finalization": typeof domain_finalization;
   "domain/identity": typeof domain_identity;
   "domain/model": typeof domain_model;
@@ -39,6 +43,8 @@ declare const fullApi: ApiFromModules<{
   "domain/retention": typeof domain_retention;
   "domain/tokens": typeof domain_tokens;
   "domain/validators": typeof domain_validators;
+  "lib/lifecycle": typeof lib_lifecycle;
+  "lib/memberships": typeof lib_memberships;
   maintenance: typeof maintenance;
   meetings: typeof meetings;
   rateLimit: typeof rateLimit;

@@ -1,3 +1,8 @@
+import { ensureVerifiedIdentityUser, insertMembership } from "./lib/memberships";
+import {
+  insertAuditEvent,
+  insertNotificationPlaceholdersForMeeting,
+} from "./lib/lifecycle";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -18,7 +23,6 @@ import {
 import { assertVerifiedEmailIdentity } from "./domain/identity";
 import {
   buildFinalizeMeetingPatch,
-  buildLifecycleNotificationPlaceholders,
   buildReopenMeetingPatch,
 } from "./domain/finalization";
 import { createSecretToken } from "./domain/tokens";
@@ -33,6 +37,7 @@ import {
   availabilityResponseValidator,
   finalizedSlotValidator,
   privacyModeValidator,
+  membershipRoleValidator,
 } from "./domain/validators";
 import {
   assertApiCanEditMembershipAvailability,
@@ -162,6 +167,12 @@ export const createMeeting = mutation({
     creatorPrivacyMode: v.optional(privacyModeValidator),
     settings: v.object(meetingSettingsArgs),
   },
+  returns: v.object({
+    meetingId: v.id("meetings"),
+    slug: v.string(),
+    adminMembershipId: v.id("memberships"),
+    tokenFingerprint: v.string(),
+  }),
   handler: async (ctx, args) => {
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "meetings:create",
@@ -202,19 +213,19 @@ export const createMeeting = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    const adminMembershipId = await ctx.db.insert("memberships", {
-      meetingId,
-      emailIdentityId: credential.identity._id,
-      displayName: args.creatorName?.trim() ?? credential.identity.displayName,
-      role: "admin",
-      privacyMode: args.creatorPrivacyMode ?? "detailed",
-      tokenHash: adminToken.tokenHash,
-      tokenFingerprint: adminToken.tokenFingerprint,
-      tokenVersion: 1,
-      tokenCreatedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const adminMembershipId = await insertMembership(
+      ctx,
+      {
+        meetingId,
+        emailIdentityId: credential.identity._id,
+        userId: await ensureVerifiedIdentityUser(ctx, credential.identity, now),
+        displayName: args.creatorName?.trim() ?? credential.identity.displayName,
+        role: "admin",
+        privacyMode: args.creatorPrivacyMode ?? "detailed",
+      },
+      adminToken,
+      now,
+    );
     await ctx.db.patch(meetingId, {
       createdByMembershipId: adminMembershipId,
       updatedAt: now,
@@ -297,6 +308,12 @@ export const createParticipant = mutation({
     displayName: v.string(),
     privacyMode: v.optional(privacyModeValidator),
   },
+  returns: v.object({
+    meetingId: v.id("meetings"),
+    membershipId: v.id("memberships"),
+    displayName: v.string(),
+    role: membershipRoleValidator,
+  }),
   handler: async (ctx, args) => {
     const credential = await requireApiCredential(ctx, args.tokenHash, [
       "availability:write",
@@ -318,6 +335,11 @@ export const createParticipant = mutation({
         membership.meetingId === meeting._id && membership.revokedAt === undefined,
     );
     if (existingMembership) {
+      if (!existingMembership.userId) {
+        await ctx.db.patch(existingMembership._id, {
+          userId: await ensureVerifiedIdentityUser(ctx, credential.identity, now),
+        });
+      }
       await touchApiToken(ctx, credential.token._id, now);
       return {
         meetingId: meeting._id,
@@ -329,19 +351,19 @@ export const createParticipant = mutation({
     await assertApiMutationRateLimit(ctx, "api.participants.create", credential);
 
     const membershipToken = await createSecretToken("membership");
-    const membershipId = await ctx.db.insert("memberships", {
-      meetingId: meeting._id,
-      emailIdentityId: credential.identity._id,
-      displayName,
-      role: "member",
-      privacyMode: args.privacyMode ?? "detailed",
-      tokenHash: membershipToken.tokenHash,
-      tokenFingerprint: membershipToken.tokenFingerprint,
-      tokenVersion: 1,
-      tokenCreatedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const membershipId = await insertMembership(
+      ctx,
+      {
+        meetingId: meeting._id,
+        emailIdentityId: credential.identity._id,
+        userId: await ensureVerifiedIdentityUser(ctx, credential.identity, now),
+        displayName,
+        role: "member",
+        privacyMode: args.privacyMode ?? "detailed",
+      },
+      membershipToken,
+      now,
+    );
     await insertAuditEvent(ctx, {
       meetingId: meeting._id,
       actorMembershipId: membershipId,
@@ -726,81 +748,6 @@ async function insertAllowedTimeRanges(
       createdAt: args.now,
       updatedAt: args.now,
     });
-  }
-}
-
-async function insertAuditEvent(
-  ctx: MutationLikeCtx,
-  args: {
-    meetingId: Id<"meetings">;
-    actorMembershipId?: Id<"memberships">;
-    targetMembershipId?: Id<"memberships">;
-    kind: string;
-    metadata: Record<string, string | number | boolean | null>;
-    now: number;
-  },
-) {
-  await ctx.db.insert("auditEvents", {
-    meetingId: args.meetingId,
-    actorMembershipId: args.actorMembershipId,
-    targetMembershipId: args.targetMembershipId,
-    kind: args.kind,
-    metadata: args.metadata,
-    createdAt: args.now,
-  });
-}
-
-async function insertNotificationPlaceholdersForMeeting(
-  ctx: MutationLikeCtx,
-  args: {
-    meetingId: Id<"meetings">;
-    kind: "meeting.finalized" | "meeting.reopened";
-    lifecycleRevision: number;
-    payload: Record<string, string | number | boolean | null>;
-    now: number;
-  },
-) {
-  const memberships = await ctx.db
-    .query("memberships")
-    .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
-    .collect();
-  const emailIdentityIds = Array.from(
-    new Set(
-      memberships
-        .map((membership) => membership.emailIdentityId)
-        .filter((emailIdentityId): emailIdentityId is Id<"emailIdentities"> =>
-          Boolean(emailIdentityId),
-        ),
-    ),
-  );
-  const loadedEmailIdentities = await Promise.all(
-    emailIdentityIds.map((emailIdentityId) => ctx.db.get(emailIdentityId)),
-  );
-  const emailIdentities = loadedEmailIdentities.filter(
-    (identity): identity is NonNullable<(typeof loadedEmailIdentities)[number]> =>
-      identity !== null,
-  );
-  const placeholders = buildLifecycleNotificationPlaceholders({
-    meetingId: args.meetingId,
-    memberships,
-    emailIdentities,
-    kind: args.kind,
-    lifecycleRevision: args.lifecycleRevision,
-    payload: args.payload,
-    now: args.now,
-  });
-
-  for (const placeholder of placeholders) {
-    if (placeholder.dedupeKey) {
-      const existing = await ctx.db
-        .query("notificationOutbox")
-        .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", placeholder.dedupeKey))
-        .unique();
-      if (existing) {
-        continue;
-      }
-    }
-    await ctx.db.insert("notificationOutbox", placeholder);
   }
 }
 
