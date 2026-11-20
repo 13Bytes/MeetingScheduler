@@ -1,4 +1,4 @@
-import { CalendarDays, Link2, Mail, Sparkles } from "lucide-react";
+import { CodeXml, Link2, Mail, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { RoutePlaceholder } from "@/components/route-placeholder";
@@ -9,11 +9,6 @@ import { routes } from "@/lib/routes";
 
 const featureItems = [
   {
-    icon: CalendarDays,
-    label: "Share your availability",
-    text: "Invite everyone to mark the times that work for them on one simple calendar.",
-  },
-  {
     icon: Link2,
     label: "No account required",
     text: "Create a meeting and collect responses without asking anyone to sign up.",
@@ -22,6 +17,15 @@ const featureItems = [
     icon: Mail,
     label: "Come back anytime",
     text: "Add your email to keep your meetings easy to find on any device.",
+  },
+  {
+    icon: CodeXml,
+    label: "Open Source",
+    text: "The code is public. Read it, run your own copy, or help improve it.",
+    link: {
+      href: "https://github.com/13Bytes/MeetingScheduler",
+      label: "View on GitHub",
+    },
   },
 ];
 
@@ -66,6 +70,7 @@ export default function HomePage() {
             icon={item.icon}
             title={item.label}
             description={item.text}
+            link={item.link}
           />
         ))}
       </section>
