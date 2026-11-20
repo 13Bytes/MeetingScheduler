@@ -658,6 +658,12 @@ export function NewMeetingForm({
                         mode: paintMode,
                       });
                     }}
+                    onApplyRange={(cellKeys) => {
+                      if (paintMode === "preview") {
+                        return;
+                      }
+                      dispatchPaint({ type: "applyPreset", cellKeys, mode: paintMode });
+                    }}
                   />
                   <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p

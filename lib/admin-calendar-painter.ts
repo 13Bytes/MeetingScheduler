@@ -419,7 +419,7 @@ function cellsToRanges(
   ];
 }
 
-function getCellKeysInRectangle(
+export function getCellKeysInRectangle(
   grid: CalendarGrid,
   anchorCellKey: string,
   targetCellKey: string,

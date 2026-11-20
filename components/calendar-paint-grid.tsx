@@ -3,10 +3,12 @@
 import { Eraser, MousePointer2, Paintbrush } from "lucide-react";
 import type React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
-import type {
-  CalendarGrid,
-  CalendarGridCell,
-  PaintMode,
+import { Button } from "@/components/ui/button";
+import {
+  getCellKeysInRectangle,
+  type CalendarGrid,
+  type CalendarGridCell,
+  type PaintMode,
 } from "@/lib/admin-calendar-painter";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +26,7 @@ export function CalendarPaintGrid({
   onCommit,
   onCancel,
   onApplyCell,
+  onApplyRange,
   ariaLabel = "Allowed time calendar",
 }: {
   grid: CalendarGrid;
@@ -36,6 +39,11 @@ export function CalendarPaintGrid({
   onCommit: () => void;
   onCancel: () => void;
   onApplyCell: (cellKey: string) => void;
+  /**
+   * Enables the touch-friendly "Mark a range" flow: tap a start cell, scroll, tap an
+   * end cell, and the rectangle between them is painted with the current brush.
+   */
+  onApplyRange?: (cellKeys: string[]) => void;
   ariaLabel?: string;
 }) {
   const columnTemplate = `76px repeat(${grid.days.length}, minmax(64px, 1fr))`;
@@ -45,6 +53,33 @@ export function CalendarPaintGrid({
   const effectiveActiveCellKey = grid.cellsByKey.has(activeCellKey ?? "")
     ? activeCellKey
     : (grid.orderedCells[0]?.key ?? null);
+  const [isRangeSelectionRequested, setIsRangeSelectionRequested] = useState(false);
+  const [rangeAnchorCellKey, setRangeAnchorCellKey] = useState<string | null>(null);
+  const canMarkRange = Boolean(onApplyRange) && !disabled && mode !== "preview";
+  const isRangeSelectionActive = canMarkRange && isRangeSelectionRequested;
+  const effectiveRangeAnchorCellKey =
+    isRangeSelectionActive &&
+    rangeAnchorCellKey &&
+    grid.cellsByKey.has(rangeAnchorCellKey)
+      ? rangeAnchorCellKey
+      : null;
+
+  function cancelRangeSelection() {
+    setIsRangeSelectionRequested(false);
+    setRangeAnchorCellKey(null);
+  }
+
+  function handleRangeCell(cellKey: string) {
+    if (!effectiveRangeAnchorCellKey) {
+      setRangeAnchorCellKey(cellKey);
+      return;
+    }
+    onApplyRange?.([
+      ...getCellKeysInRectangle(grid, effectiveRangeAnchorCellKey, cellKey),
+    ]);
+    cancelRangeSelection();
+  }
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const timeKeysSignature = grid.timeKeys.join(",");
 
@@ -71,58 +106,96 @@ export function CalendarPaintGrid({
   }, [timeKeysSignature]);
 
   return (
-    <div
-      ref={scrollContainerRef}
-      className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
-      onPointerLeave={() => {
-        if (!disabled) {
-          onCancel();
-        }
-      }}
-    >
+    <>
+      {onApplyRange ? (
+        <div className="border-b border-border bg-surface-muted px-4 py-3 text-sm text-slate-600 sm:hidden">
+          {isRangeSelectionActive ? (
+            <div className="flex items-center justify-between gap-3">
+              <span>
+                {effectiveRangeAnchorCellKey
+                  ? "Range start selected. Scroll, then tap the end cell."
+                  : "Tap the first cell in the range."}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={cancelRangeSelection}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <span>Tap a cell to change it.</span>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!canMarkRange}
+                onClick={() => setIsRangeSelectionRequested(true)}
+              >
+                Mark a range
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
       <div
-        className="grid min-w-[720px] sm:min-w-[860px]"
-        style={{ gridTemplateColumns: columnTemplate }}
-        role="grid"
-        aria-label={ariaLabel}
+        ref={scrollContainerRef}
+        className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
+        onPointerLeave={() => {
+          if (!disabled) {
+            onCancel();
+          }
+        }}
       >
         <div
-          data-grid-header
-          className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600"
+          className="grid min-w-[720px] sm:min-w-[860px]"
+          style={{ gridTemplateColumns: columnTemplate }}
+          role="grid"
+          aria-label={ariaLabel}
         >
-          Time
-        </div>
-        {grid.days.map((day) => (
           <div
-            key={day.dateKey}
-            className={cn(
-              "sticky top-0 z-10 border-b border-r border-border bg-surface-muted px-2 py-2 text-center text-xs font-medium text-slate-700",
-              day.isWeekend && "bg-slate-100 text-slate-500",
-            )}
+            data-grid-header
+            className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600"
           >
-            <span className="block">{day.weekdayLabel}</span>
-            <span className="block font-normal">{day.dateKey.slice(5)}</span>
+            Time
           </div>
-        ))}
-        {grid.timeKeys.map((timeKey) => (
-          <CalendarRow
-            key={timeKey}
-            grid={grid}
-            timeKey={timeKey}
-            mode={mode}
-            disabled={disabled}
-            allowedCellKeys={allowedCellKeys}
-            previewCellKeys={previewCellKeys}
-            activeCellKey={effectiveActiveCellKey}
-            onBegin={onBegin}
-            onHover={onHover}
-            onCommit={onCommit}
-            onApplyCell={onApplyCell}
-            onActiveCellChange={setActiveCellKey}
-          />
-        ))}
+          {grid.days.map((day) => (
+            <div
+              key={day.dateKey}
+              className={cn(
+                "sticky top-0 z-10 border-b border-r border-border bg-surface-muted px-2 py-2 text-center text-xs font-medium text-slate-700",
+                day.isWeekend && "bg-slate-100 text-slate-500",
+              )}
+            >
+              <span className="block">{day.weekdayLabel}</span>
+              <span className="block font-normal">{day.dateKey.slice(5)}</span>
+            </div>
+          ))}
+          {grid.timeKeys.map((timeKey) => (
+            <CalendarRow
+              key={timeKey}
+              grid={grid}
+              timeKey={timeKey}
+              mode={mode}
+              disabled={disabled}
+              allowedCellKeys={allowedCellKeys}
+              previewCellKeys={previewCellKeys}
+              activeCellKey={effectiveActiveCellKey}
+              onBegin={onBegin}
+              onHover={onHover}
+              onCommit={onCommit}
+              onApplyCell={onApplyCell}
+              onActiveCellChange={setActiveCellKey}
+              rangeAnchorCellKey={effectiveRangeAnchorCellKey}
+              onRangeCell={isRangeSelectionActive ? handleRangeCell : undefined}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -139,6 +212,8 @@ function CalendarRow({
   onCommit,
   onApplyCell,
   onActiveCellChange,
+  rangeAnchorCellKey,
+  onRangeCell,
 }: {
   grid: CalendarGrid;
   timeKey: string;
@@ -152,6 +227,8 @@ function CalendarRow({
   onCommit: () => void;
   onApplyCell: (cellKey: string) => void;
   onActiveCellChange: (cellKey: string) => void;
+  rangeAnchorCellKey: string | null;
+  onRangeCell?: (cellKey: string) => void;
 }) {
   return (
     <>
@@ -187,6 +264,8 @@ function CalendarRow({
             onCommit={onCommit}
             onApplyCell={onApplyCell}
             onActiveCellChange={onActiveCellChange}
+            isRangeStart={cell.key === rangeAnchorCellKey}
+            onRangeCell={onRangeCell}
           />
         );
       })}
@@ -207,6 +286,8 @@ function CalendarCellButton({
   onCommit,
   onApplyCell,
   onActiveCellChange,
+  isRangeStart,
+  onRangeCell,
 }: {
   cell: CalendarGridCell;
   mode: PaintMode;
@@ -220,6 +301,8 @@ function CalendarCellButton({
   onCommit: () => void;
   onApplyCell: (cellKey: string) => void;
   onActiveCellChange: (cellKey: string) => void;
+  isRangeStart: boolean;
+  onRangeCell?: (cellKey: string) => void;
 }) {
   const previewClass =
     mode === "block" ? "bg-rose-200" : mode === "preview" ? "bg-sky-200" : "bg-blue-200";
@@ -246,6 +329,7 @@ function CalendarCellButton({
         isAllowed ? "bg-blue-500 hover:bg-blue-600" : "bg-surface hover:bg-blue-50",
         cell.isWeekend && !isAllowed && "bg-slate-50",
         isPreview && previewClass,
+        isRangeStart && "ring-[3px] ring-inset ring-amber-400",
       )}
       onPointerDown={(event) => {
         if (disabled) return;
@@ -259,6 +343,10 @@ function CalendarCellButton({
           return;
         }
         event.preventDefault();
+        if (onRangeCell) {
+          onRangeCell(cell.key);
+          return;
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId);
         onBegin(cell.key);
       }}
@@ -281,7 +369,13 @@ function CalendarCellButton({
         if (disabled) return;
         const touchStart = touchStartRef.current;
         if (touchStart) {
-          if (!touchStart.moved) onApplyCell(cell.key);
+          if (!touchStart.moved) {
+            if (onRangeCell) {
+              onRangeCell(cell.key);
+            } else {
+              onApplyCell(cell.key);
+            }
+          }
           touchStartRef.current = null;
           return;
         }
@@ -291,7 +385,11 @@ function CalendarCellButton({
         if (disabled) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onApplyCell(cell.key);
+          if (onRangeCell) {
+            onRangeCell(cell.key);
+          } else {
+            onApplyCell(cell.key);
+          }
           return;
         }
         const adjacentCell = getAdjacentCell(grid, cell, event.key);

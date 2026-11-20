@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { ConvexClientProvider } from "@/components/providers/convex-client-provider";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ConvexClientProvider>{children}</ConvexClientProvider>
+        <Analytics />
       </body>
     </html>
   );
