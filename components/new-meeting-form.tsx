@@ -575,7 +575,7 @@ export function NewMeetingForm({
               </div>
             ) : null}
 
-            <div className="space-y-3 border-l-2 border-primary/30 pl-4">
+            <div className="space-y-3 sm:border-l-2 sm:border-primary/30 sm:pl-4">
               <div className="text-sm text-slate-600" aria-live="polite">
                 {previewRanges.length > 0
                   ? `Participants can choose from ${previewRanges.length} time window${
@@ -617,7 +617,7 @@ export function NewMeetingForm({
               {useConstraintCalendar ? (
                 <div
                   id="creation-constraint-calendar"
-                  className="overflow-hidden rounded-md border border-border bg-surface"
+                  className="-mx-4 overflow-hidden border-y border-border bg-surface sm:mx-0 sm:rounded-md sm:border"
                 >
                   <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
