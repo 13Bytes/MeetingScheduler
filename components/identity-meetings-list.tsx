@@ -41,26 +41,20 @@ export function IdentityMeetingsList({
 }) {
   if (dashboard.memberships.length === 0) {
     return (
-      <Card>
-        <CardContent className="grid min-h-48 place-items-center pt-5 text-center text-sm leading-6 text-slate-600">
-          {emptyMessage}
-        </CardContent>
-      </Card>
+      <section className="space-y-4">
+        <VerifiedEmailsNotice dashboard={dashboard} />
+        <Card>
+          <CardContent className="grid min-h-48 place-items-center pt-5 text-center text-sm leading-6 text-slate-600">
+            {emptyMessage}
+          </CardContent>
+        </Card>
+      </section>
     );
   }
 
   return (
     <section className="space-y-4">
-      {dashboard.verifiedEmails && dashboard.verifiedEmails.length > 0 ? (
-        <div className="rounded-md border border-border bg-surface-muted p-3 text-sm leading-6 text-slate-600">
-          Verified email{dashboard.verifiedEmails.length === 1 ? "" : "s"}:{" "}
-          <span className="font-medium text-foreground">
-            {dashboard.verifiedEmails
-              .map((identity) => identity.normalizedEmail)
-              .join(", ")}
-          </span>
-        </div>
-      ) : null}
+      <VerifiedEmailsNotice dashboard={dashboard} />
       <div className="grid gap-4 lg:grid-cols-2">
         {dashboard.memberships.map((membership) => (
           <Card key={membership.membershipId}>
@@ -105,5 +99,23 @@ export function IdentityMeetingsList({
         ))}
       </div>
     </section>
+  );
+}
+
+export function hasVerifiedEmail(dashboard: IdentityMeetingsDashboard): boolean {
+  return Boolean(dashboard.verifiedEmails?.length);
+}
+
+function VerifiedEmailsNotice({ dashboard }: { dashboard: IdentityMeetingsDashboard }) {
+  if (!dashboard.verifiedEmails?.length) {
+    return null;
+  }
+  return (
+    <div className="rounded-md border border-border bg-surface-muted p-3 text-sm leading-6 text-slate-600">
+      Verified email{dashboard.verifiedEmails.length === 1 ? "" : "s"}:{" "}
+      <span className="font-medium text-foreground">
+        {dashboard.verifiedEmails.map((identity) => identity.normalizedEmail).join(", ")}
+      </span>
+    </div>
   );
 }

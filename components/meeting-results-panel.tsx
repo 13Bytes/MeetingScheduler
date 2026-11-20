@@ -129,7 +129,13 @@ export function MeetingResultsPanel({
         />
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+      <div
+        className={cn(
+          "grid gap-4",
+          (shouldShowShortlist || shouldShowWaitingState) &&
+            "xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]",
+        )}
+      >
         {shouldShowShortlist ? (
           <Card>
             <CardHeader className="border-b border-border">

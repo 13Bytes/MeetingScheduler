@@ -6,7 +6,7 @@ const times = ["9:00", "10:00", "11:00", "12:00", "13:00"];
 const selectedCells = new Set(["Mon-10:00", "Mon-11:00", "Wed-9:00", "Thu-13:00"]);
 const tentativeCells = new Set(["Tue-12:00", "Wed-10:00", "Fri-11:00"]);
 const gridColumnsClassName =
-  "grid min-w-[420px] grid-cols-[64px_repeat(5,minmax(64px,1fr))] sm:min-w-0 sm:grid-cols-[72px_repeat(5,minmax(72px,1fr))]";
+  "grid grid-cols-[52px_repeat(5,minmax(0,1fr))] sm:grid-cols-[72px_repeat(5,minmax(72px,1fr))]";
 
 export function CalendarGridPreview() {
   return (
@@ -17,9 +17,12 @@ export function CalendarGridPreview() {
           "bg-surface-muted text-xs font-medium text-slate-600",
         )}
       >
-        <div className="border-r border-border px-3 py-2">Time</div>
+        <div className="border-r border-border px-2 py-2 sm:px-3">Time</div>
         {days.map((day) => (
-          <div key={day} className="border-r border-border px-3 py-2 last:border-r-0">
+          <div
+            key={day}
+            className="border-r border-border px-2 py-2 sm:px-3 last:border-r-0"
+          >
             {day}
           </div>
         ))}
@@ -36,7 +39,7 @@ export function CalendarGridPreview() {
 function Row({ time }: { time: string }) {
   return (
     <>
-      <div className="border-r border-t border-border bg-surface-muted px-3 py-4 text-xs font-medium text-slate-500">
+      <div className="border-r border-t border-border bg-surface-muted px-2 py-4 text-xs sm:px-3 font-medium text-slate-500">
         {time}
       </div>
       {days.map((day) => {

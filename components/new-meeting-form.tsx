@@ -277,7 +277,7 @@ export function NewMeetingForm({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
-      <form className="space-y-6" onSubmit={handleSubmit}>
+      <form className="min-w-0 space-y-6" onSubmit={handleSubmit}>
         <section className="space-y-3">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">

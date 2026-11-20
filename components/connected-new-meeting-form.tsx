@@ -1,9 +1,42 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import { NewMeetingForm } from "@/components/new-meeting-form";
 import { getAnonymousClientRateLimitKey } from "@/lib/client-rate-limit-key";
 
+const subscribeNoop = () => () => {};
+
+/**
+ * The form's defaults (timezone, custom date range, preset windows) come from the
+ * browser's timezone and clock, which the server can't know. Rendering it only on the
+ * client avoids a hydration mismatch for anyone not in the server's timezone.
+ */
+function useIsClient() {
+  return useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+}
+
 export function ConnectedNewMeetingForm() {
+  const isClient = useIsClient();
+
+  if (!isClient) {
+    return (
+      <div className="space-y-2" aria-busy="true">
+        <h1 className="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
+          Create a meeting
+        </h1>
+        <p className="flex items-center gap-2 text-sm leading-6 text-slate-600">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          Loading meeting options…
+        </p>
+      </div>
+    );
+  }
+
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
     return <NewMeetingForm />;
   }

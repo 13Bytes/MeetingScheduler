@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import {
+  hasVerifiedEmail,
   IdentityMeetingsList,
   type IdentityMeetingsDashboard,
 } from "@/components/identity-meetings-list";
@@ -25,6 +26,8 @@ export default async function IdentityPage() {
     getIdentitySessionSecret(),
   );
   const dashboard = session ? await loadDashboard(session.userId) : null;
+  const loadedDashboard = dashboard && !("error" in dashboard) ? dashboard : null;
+  const isEmailVerified = loadedDashboard ? hasVerifiedEmail(loadedDashboard) : false;
 
   return (
     <AppShell>
@@ -33,7 +36,12 @@ export default async function IdentityPage() {
         <h1 className="text-3xl font-semibold tracking-normal text-foreground">
           All Meetings
         </h1>
-        {dashboard && !("error" in dashboard) ? (
+        {isEmailVerified ? (
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            Open a meeting to update your availability, invite others, or manage its
+            details.
+          </p>
+        ) : loadedDashboard ? (
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
             Your meetings are ready here. Add an email if you want to find them from
             another device too.
@@ -53,7 +61,13 @@ export default async function IdentityPage() {
         ) : null}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
+      <section
+        className={
+          isEmailVerified
+            ? "grid gap-6"
+            : "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start"
+        }
+      >
         <div className="min-w-0">
           {dashboard ? (
             "error" in dashboard ? (
@@ -68,9 +82,11 @@ export default async function IdentityPage() {
             )
           ) : null}
         </div>
-        <aside className="lg:sticky lg:top-6">
-          <IdentityLoginPanel />
-        </aside>
+        {isEmailVerified ? null : (
+          <aside className="lg:sticky lg:top-6">
+            <IdentityLoginPanel />
+          </aside>
+        )}
       </section>
     </AppShell>
   );

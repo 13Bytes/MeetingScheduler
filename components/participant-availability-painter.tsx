@@ -213,30 +213,36 @@ export function ConnectedPublicParticipantMeeting({
 
   if (activeRememberedMembershipToken && validRememberedMeetingData) {
     return (
-      <ParticipantAvailabilityPainter
-        data={validRememberedMeetingData}
-        existingMembershipToken={activeRememberedMembershipToken}
-        onSaveAvailability={(token, records) =>
-          saveAvailabilityRecords({ membershipToken: token, records })
-        }
-        onUpdateDisplayName={(token, nextDisplayName) =>
-          updateMembershipDisplayName({
-            membershipToken: token,
-            displayName: nextDisplayName,
-          })
-        }
-        onFinalizeMeeting={(token, finalizedSlot) =>
-          finalizeMeeting({ membershipToken: token, finalizedSlot })
-        }
-        onReopenMeeting={(token) => reopenMeeting({ membershipToken: token })}
-        onCreateAdminInviteToken={(membershipToken) =>
-          createAdminInviteToken({ membershipToken })
-        }
-        onMembershipTokenAvailable={(membershipToken, slug) => {
-          rememberMembershipToken(slug, membershipToken);
-          setRememberedMembershipToken(membershipToken);
-        }}
-      />
+      <div className="space-y-6">
+        <ParticipantAvailabilityPainter
+          data={validRememberedMeetingData}
+          existingMembershipToken={activeRememberedMembershipToken}
+          onSaveAvailability={(token, records) =>
+            saveAvailabilityRecords({ membershipToken: token, records })
+          }
+          onUpdateDisplayName={(token, nextDisplayName) =>
+            updateMembershipDisplayName({
+              membershipToken: token,
+              displayName: nextDisplayName,
+            })
+          }
+          onFinalizeMeeting={(token, finalizedSlot) =>
+            finalizeMeeting({ membershipToken: token, finalizedSlot })
+          }
+          onReopenMeeting={(token) => reopenMeeting({ membershipToken: token })}
+          onCreateAdminInviteToken={(membershipToken) =>
+            createAdminInviteToken({ membershipToken })
+          }
+          onMembershipTokenAvailable={(membershipToken, slug) => {
+            rememberMembershipToken(slug, membershipToken);
+            setRememberedMembershipToken(membershipToken);
+          }}
+        />
+        <AdminSetupSection
+          meetingData={validRememberedMeetingData}
+          membershipToken={activeRememberedMembershipToken}
+        />
+      </div>
     );
   }
 
@@ -292,14 +298,12 @@ export function ConnectedMembershipAvailability({
     membershipToken,
   });
   const saveAvailabilityRecords = useMutation(api.meetings.saveAvailabilityRecords);
-  const updateMeetingSettings = useMutation(api.meetings.updateMeetingSettings);
   const finalizeMeeting = useMutation(api.meetings.finalizeMeeting);
   const reopenMeeting = useMutation(api.meetings.reopenMeeting);
   const updateMembershipDisplayName = useMutation(
     api.meetings.updateMembershipDisplayName,
   );
   const createAdminInviteToken = useMutation(api.meetings.createAdminInviteToken);
-  const [showAdminSetup, setShowAdminSetup] = useState(false);
 
   if (meetingData === undefined) {
     return <LoadingPanel label="Loading your meeting" />;
@@ -313,8 +317,6 @@ export function ConnectedMembershipAvailability({
       />
     );
   }
-
-  const canAdminister = meetingData.capabilities.canAdminister;
 
   return (
     <div className="space-y-6">
@@ -340,31 +342,50 @@ export function ConnectedMembershipAvailability({
         onMembershipTokenAvailable={(token, slug) => rememberMembershipToken(slug, token)}
       />
 
-      {canAdminister ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings2 className="size-5 text-primary" aria-hidden="true" />
-              Admin Access
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-slate-600">
-              You can also choose which times participants may respond to.
-            </p>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setShowAdminSetup((value) => !value)}
-            >
-              <Settings2 className="size-4" aria-hidden="true" />
-              {showAdminSetup ? "Hide available times" : "Edit available times"}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+      <AdminSetupSection meetingData={meetingData} membershipToken={membershipToken} />
+    </div>
+  );
+}
 
-      {canAdminister && showAdminSetup ? (
+function AdminSetupSection({
+  meetingData,
+  membershipToken,
+}: {
+  meetingData: ParticipantData & { membership: MembershipSummary };
+  membershipToken: string;
+}) {
+  const updateMeetingSettings = useMutation(api.meetings.updateMeetingSettings);
+  const [showAdminSetup, setShowAdminSetup] = useState(false);
+
+  if (!meetingData.capabilities.canAdminister) {
+    return null;
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings2 className="size-5 text-primary" aria-hidden="true" />
+            Admin Access
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-slate-600">
+            You can also choose which times participants may respond to.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setShowAdminSetup((value) => !value)}
+          >
+            <Settings2 className="size-4" aria-hidden="true" />
+            {showAdminSetup ? "Hide available times" : "Edit available times"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {showAdminSetup ? (
         <AdminCalendarPainter
           data={{
             meeting: meetingData.meeting,
@@ -387,7 +408,7 @@ export function ConnectedMembershipAvailability({
           }
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -1095,7 +1116,9 @@ function MeetingLinksPanel({
       role="group"
       aria-label="Meeting links"
     >
-      <span className="mr-0.5 text-sm font-medium text-black">Invitation Links to copy</span>
+      <span className="mr-0.5 text-sm font-medium text-black">
+        Invitation Links to copy
+      </span>
       {publicParticipantUrl ? (
         <CompactLinkButton
           label="Participant invite"
@@ -1155,12 +1178,12 @@ function CompactLinkButton({
   privateLink = false,
   className = "",
 }: {
-    label: string;
+  label: string;
   copied: boolean;
   onCopy: () => void;
   disabled?: boolean;
-    privateLink?: boolean;
-    className?: HTMLProps<HTMLElement>["className"];
+  privateLink?: boolean;
+  className?: HTMLProps<HTMLElement>["className"];
 }) {
   return (
     <Button

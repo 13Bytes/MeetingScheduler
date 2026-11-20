@@ -2,13 +2,16 @@
 
 import { Eraser, MousePointer2, Paintbrush } from "lucide-react";
 import type React from "react";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type {
   CalendarGrid,
   CalendarGridCell,
   PaintMode,
 } from "@/lib/admin-calendar-painter";
 import { cn } from "@/lib/utils";
+
+/** Rows before this time are rarely used, so the grid opens scrolled to it. */
+const DEFAULT_SCROLL_TIME_KEY = "08:00";
 
 export function CalendarPaintGrid({
   grid,
@@ -42,8 +45,34 @@ export function CalendarPaintGrid({
   const effectiveActiveCellKey = grid.cellsByKey.has(activeCellKey ?? "")
     ? activeCellKey
     : (grid.orderedCells[0]?.key ?? null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const timeKeysSignature = grid.timeKeys.join(",");
+
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    const scrollTimeKey = timeKeysSignature
+      .split(",")
+      .find((timeKey) => timeKey >= DEFAULT_SCROLL_TIME_KEY);
+    if (!container || !scrollTimeKey) {
+      return;
+    }
+    const row = container.querySelector<HTMLElement>(
+      `[data-time-key="${scrollTimeKey}"]`,
+    );
+    const header = container.querySelector<HTMLElement>("[data-grid-header]");
+    if (!row) {
+      return;
+    }
+    container.scrollTop =
+      row.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      (header?.offsetHeight ?? 0);
+  }, [timeKeysSignature]);
+
   return (
     <div
+      ref={scrollContainerRef}
       className="max-h-[72vh] w-full min-w-0 touch-pan-x touch-pan-y overflow-auto overscroll-contain"
       onPointerLeave={() => {
         if (!disabled) {
@@ -57,7 +86,10 @@ export function CalendarPaintGrid({
         role="grid"
         aria-label={ariaLabel}
       >
-        <div className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600">
+        <div
+          data-grid-header
+          className="sticky left-0 top-0 z-20 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-600"
+        >
           Time
         </div>
         {grid.days.map((day) => (
@@ -123,7 +155,10 @@ function CalendarRow({
 }) {
   return (
     <>
-      <div className="sticky left-0 z-10 min-h-9 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-500 sm:min-h-7 sm:py-1">
+      <div
+        data-time-key={timeKey}
+        className="sticky left-0 z-10 min-h-9 border-b border-r border-border bg-surface-muted px-3 py-2 text-xs font-medium text-slate-500 sm:min-h-7 sm:py-1"
+      >
         {timeKey}
       </div>
       {grid.days.map((day) => {

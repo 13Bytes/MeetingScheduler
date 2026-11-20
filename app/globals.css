@@ -31,44 +31,48 @@
     sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* Base rules live in the base layer so Tailwind utilities (e.g. text-primary-foreground
+   on <Button asChild><Link>) can override them. Unlayered rules always beat layers. */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-html {
-  width: 100%;
-  min-height: 100%;
-  background: var(--background);
-  overflow-x: hidden;
-}
+  html {
+    width: 100%;
+    min-height: 100%;
+    background: var(--background);
+    overflow-x: hidden;
+  }
 
-body {
-  width: 100%;
-  min-height: 100%;
-  margin: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  overflow-x: hidden;
-  text-rendering: optimizeLegibility;
-}
+  body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+    text-rendering: optimizeLegibility;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 
-input,
-textarea,
-select {
-  min-width: 0;
+  input,
+  textarea,
+  select {
+    min-width: 0;
+  }
 }
 
 ::selection {
